@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "516105079261",
+    "project_id": "vlingo-cbe71",
+    "storage_bucket": "vlingo-cbe71.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:516105079261:android:728e7711e9c63cd7030e34",
+        "android_client_info": {
+          "package_name": "com.company.vlingo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCB-AaKTUTXcdJc16dDjxwLfbhKWqJrxNI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

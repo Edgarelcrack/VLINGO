@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "VLINGO",
+    "slug": "vlingo-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0e0e0e"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0e0e0e"
+      }
+    },
+    "ios": {
+      "supportsTablet": false
+    }
+  }
+}

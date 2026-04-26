@@ -5,14 +5,17 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 
-import HomeScreen           from '../screens/HomeScreen';
-import ChatScreen           from '../screens/ChatScreen';
-import CursoScreen          from '../screens/CursoScreen';
-import ParteCursoScreen     from '../screens/ParteCursoScreen';
-import PerfilScreen         from '../screens/PerfilScreen';
-import LoginScreen          from '../screens/LoginScreen';
-import RegisterScreen       from '../screens/RegisterScreen';
-import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import HomeScreen             from '../screens/HomeScreen';
+import ChatScreen             from '../screens/ChatScreen';
+import CursosListScreen       from '../screens/CursosListScreen';
+import CursoScreen            from '../screens/CursoScreen';
+import ParteCursoScreen       from '../screens/ParteCursoScreen';
+import PerfilScreen           from '../screens/PerfilScreen';
+import LoginScreen            from '../screens/LoginScreen';
+import RegisterScreen         from '../screens/RegisterScreen';
+import ForgotPasswordScreen   from '../screens/ForgotPasswordScreen';
+import CrearCursoScreen       from '../screens/CrearCursoScreen';
+import EditorSeccionesScreen  from '../screens/EditorSeccionesScreen';
 
 import { useAuth } from '../context/AuthContext';
 import { Colors } from '../theme';
@@ -41,9 +44,9 @@ function AuthStack() {
 function HomeStack() {
   return (
     <Stack.Navigator screenOptions={screenOpts}>
-      <Stack.Screen name="HomeMain" component={HomeScreen}       options={{ headerShown: false }} />
-      <Stack.Screen name="Curso"    component={CursoScreen}      options={{ title: 'Business Vocabulary' }} />
-      <Stack.Screen name="Parte"    component={ParteCursoScreen} options={{ title: 'Business Vocabulary' }} />
+      <Stack.Screen name="HomeMain" component={HomeScreen}      options={{ headerShown: false }} />
+      <Stack.Screen name="Curso"    component={CursoScreen}     options={({ route }: any) => ({ title: route.params?.titulo ?? 'Curso' })} />
+      <Stack.Screen name="Parte"    component={ParteCursoScreen} options={({ route }: any) => ({ title: route.params?.titulo ?? 'Parte' })} />
     </Stack.Navigator>
   );
 }
@@ -51,8 +54,11 @@ function HomeStack() {
 function LessonsStack() {
   return (
     <Stack.Navigator screenOptions={screenOpts}>
-      <Stack.Screen name="Curso" component={CursoScreen}      options={{ title: 'Business Vocabulary' }} />
-      <Stack.Screen name="Parte" component={ParteCursoScreen} options={{ title: 'Business Vocabulary' }} />
+      <Stack.Screen name="CursosList"      component={CursosListScreen}      options={{ headerShown: false }} />
+      <Stack.Screen name="Curso"           component={CursoScreen}           options={({ route }: any) => ({ title: route.params?.titulo ?? 'Curso' })} />
+      <Stack.Screen name="Parte"           component={ParteCursoScreen}      options={({ route }: any) => ({ title: route.params?.titulo ?? 'Parte' })} />
+      <Stack.Screen name="CrearCurso"      component={CrearCursoScreen}      options={{ title: 'Nuevo curso', headerShown: true }} />
+      <Stack.Screen name="EditorSecciones" component={EditorSeccionesScreen} options={{ title: 'Editor', headerShown: false }} />
     </Stack.Navigator>
   );
 }
@@ -66,13 +72,13 @@ function AppTabs() {
         headerTitleStyle: { fontWeight: '800' as const, color: Colors.text },
         headerShadowVisible: false,
         tabBarStyle: {
-  backgroundColor: Colors.surface,
-  borderTopColor: Colors.border,
-  borderTopWidth: 1,
-  height: Platform.OS === 'ios' ? 82 : 70,
-  paddingBottom: Platform.OS === 'ios' ? 18 : 12,
-  paddingTop: 6,
-},
+          backgroundColor: Colors.surface,
+          borderTopColor: Colors.border,
+          borderTopWidth: 1,
+          height: Platform.OS === 'ios' ? 82 : 70,
+          paddingBottom: Platform.OS === 'ios' ? 18 : 12,
+          paddingTop: 6,
+        },
         tabBarShowLabel: true,
         tabBarActiveTintColor: Colors.accentBlue,
         tabBarInactiveTintColor: Colors.text3,
@@ -99,7 +105,7 @@ function AppTabs() {
         component={LessonsStack}
         options={{
           headerShown: false,
-          tabBarLabel: 'Lessons',
+          tabBarLabel: 'Cursos',
           tabBarIcon: ({ focused, color }) =>
             <Ionicons name={focused ? 'book' : 'book-outline'} size={22} color={color} />,
         }}

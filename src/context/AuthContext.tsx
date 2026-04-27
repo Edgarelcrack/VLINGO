@@ -1,48 +1,162 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { UserProfile, TipoUsuario } from '../types';
+import { getUserProfile, validarCodigoInvitacion, marcarCodigoUsado } from '../services/usuariosService';
 
 type AuthContextType = {
   session: Session | null;
   user: User | null;
+  userProfile: UserProfile | null;
   loading: boolean;
-  signUp: (email: string, password: string, name: string) => Promise<{ error: string | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    name: string,
+    tipo?: TipoUsuario,
+    codigoInvitacion?: string,
+    nivel?: string
+  ) => Promise<{ error: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
+  reclamarProfesor: (codigoInvitacion: string) => Promise<{ error: string | null }>;
 };
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [session, setSession]           = useState<Session | null>(null);
+  const [user, setUser]                 = useState<User | null>(null);
+  const [userProfile, setUserProfile]   = useState<UserProfile | null>(null);
+  const [loading, setLoading]           = useState(true);
+
+  const fetchProfile = async (userId: string) => {
+    const { data, error } = await getUserProfile(userId);
+    console.log('[AuthContext] fetchProfile →', { userId, data, error });
+
+    if (data) {
+      setUserProfile(data);
+      return;
+    }
+
+    // Only create a fallback row when the row truly doesn't exist (PGRST116 = 0 rows from .single())
+    // Any other error (RLS, network, etc.) should not create a new row
+    const isNotFound = !error || error.includes('PGRST116') || error.includes('no rows');
+    if (!isNotFound) {
+      console.error('[AuthContext] fetchProfile error (not creating row):', error);
+      return;
+    }
+
+    await supabase.from('usuario').upsert(
+      { id: userId, nombre: 'Usuario', email: '', tipo: 'estudiante', fecha_registro: new Date().toISOString() },
+      { onConflict: 'id', ignoreDuplicates: true }
+    );
+    const { data: retry } = await getUserProfile(userId);
+    console.log('[AuthContext] fetchProfile retry →', retry);
+    setUserProfile(retry);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) fetchProfile(session.user.id);
       setLoading(false);
     });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
+        setUserProfile(null);
+      }
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, name: string) => {
-    const { error } = await supabase.auth.signUp({
+  const crearRegistroUsuario = async (
+    userId: string,
+    nombre: string,
+    email: string,
+    tipo: TipoUsuario,
+    nivel?: string
+  ): Promise<string | null> => {
+    const nivelFinal = (tipo === 'profesor' || tipo === 'administrador') ? 'C2' : (nivel ?? null);
+    const { error } = await supabase
+      .from('usuario')
+      .upsert(
+        { id: userId, nombre, email, tipo, nivel: nivelFinal, fecha_registro: new Date().toISOString() },
+        { onConflict: 'id' }
+      );
+    return error?.message ?? null;
+  };
+
+  const signUp = async (
+    email: string,
+    password: string,
+    name: string,
+    tipo: TipoUsuario = 'estudiante',
+    codigoInvitacion?: string,
+    nivel?: string
+  ) => {
+    if (tipo === 'administrador') {
+      return { error: 'Los administradores deben ser creados por otro administrador' };
+    }
+
+    if (tipo === 'profesor') {
+      if (!codigoInvitacion?.trim()) {
+        return { error: 'Los profesores necesitan un código de invitación' };
+      }
+      const { valido, codigoId } = await validarCodigoInvitacion(codigoInvitacion, 'profesor');
+      if (!valido || !codigoId) {
+        return { error: 'Código de invitación inválido o ya utilizado' };
+      }
+
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: { data: { full_name: name.trim() } },
+      });
+      if (error) return { error: error.message };
+
+      if (data?.user) {
+        const upsertError = await crearRegistroUsuario(
+          data.user.id,
+          name.trim(),
+          email.trim().toLowerCase(),
+          'profesor',
+          nivel
+        );
+        if (upsertError) return { error: 'Error asignando rol de profesor: ' + upsertError };
+        await marcarCodigoUsado(codigoId);
+        await fetchProfile(data.user.id);
+      }
+      return { error: null };
+    }
+
+    // Estudiante
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
-      options: {
-        data: { full_name: name.trim() },
-      },
+      options: { data: { full_name: name.trim() } },
     });
     if (error) return { error: error.message };
+
+    if (data?.user) {
+      await crearRegistroUsuario(
+        data.user.id,
+        name.trim(),
+        email.trim().toLowerCase(),
+        'estudiante',
+        nivel
+      );
+      await fetchProfile(data.user.id);
+    }
     return { error: null };
   };
 
@@ -67,8 +181,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: null };
   };
 
+  const reclamarProfesor = async (codigoInvitacion: string) => {
+    if (!user) return { error: 'No hay sesión activa' };
+    const { valido, codigoId } = await validarCodigoInvitacion(codigoInvitacion.trim(), 'profesor');
+    if (!valido || !codigoId) return { error: 'Código de invitación inválido o ya utilizado' };
+    const { error } = await supabase
+      .from('usuario')
+      .update({ tipo: 'profesor' })
+      .eq('id', user.id);
+    if (error) return { error: error.message };
+    await marcarCodigoUsado(codigoId);
+    await fetchProfile(user.id);
+    return { error: null };
+  };
+
   return (
-    <AuthContext.Provider value={{ session, user, loading, signUp, signIn, signOut, resetPassword }}>
+    <AuthContext.Provider value={{ session, user, userProfile, loading, signUp, signIn, signOut, resetPassword, reclamarProfesor }}>
       {children}
     </AuthContext.Provider>
   );

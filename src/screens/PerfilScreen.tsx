@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 
@@ -35,8 +35,31 @@ const NAVY = '#1E2D3D';
 const BG   = '#F2F4F6';
 const WHITE = '#fff';
 
+const TIPO_LABEL: Record<string, string> = {
+  estudiante: 'Estudiante',
+  profesor: 'Profesor',
+  administrador: 'Administrador',
+};
+
 export default function PerfilScreen() {
-  const { signOut, user } = useAuth();
+  const { signOut, user, userProfile, reclamarProfesor } = useAuth();
+  const [modalVisible, setModalVisible] = useState(false);
+  const [codigo, setCodigo]             = useState('');
+  const [claiming, setClaiming]         = useState(false);
+
+  const handleReclamarProfesor = async () => {
+    if (!codigo.trim()) return;
+    setClaiming(true);
+    const { error } = await reclamarProfesor(codigo.trim());
+    setClaiming(false);
+    if (error) {
+      Alert.alert('Error', error);
+    } else {
+      setModalVisible(false);
+      setCodigo('');
+      Alert.alert('¡Listo!', 'Tu cuenta ahora tiene rol de Profesor.');
+    }
+  };
 
   const handleSignOut = () => {
     Alert.alert(
@@ -49,10 +72,14 @@ export default function PerfilScreen() {
     );
   };
 
-  const displayName = user?.user_metadata?.full_name
+  const displayName = userProfile?.nombre
+    || user?.user_metadata?.full_name
     || user?.email?.split('@')[0]
     || 'Usuario';
   const initial = displayName.charAt(0).toUpperCase();
+  const nivelTxt = userProfile?.nivel
+    ? `Nivel ${userProfile.nivel} · ${TIPO_LABEL[userProfile.tipo] ?? 'Estudiante'}`
+    : TIPO_LABEL[userProfile?.tipo ?? 'estudiante'] ?? 'Estudiante';
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
@@ -65,7 +92,7 @@ export default function PerfilScreen() {
           <Text style={s.name}>{displayName}</Text>
           {user?.email ? <Text style={s.email}>{user.email}</Text> : null}
           <View style={s.levelPill}>
-            <Text style={s.levelPillTxt}>Nivel B2 · Intermedio Alto</Text>
+            <Text style={s.levelPillTxt}>{nivelTxt}</Text>
           </View>
         </View>
 
@@ -140,6 +167,13 @@ export default function PerfilScreen() {
           ))}
         </View>
 
+        {/* Reclamar rol profesor */}
+        {userProfile?.tipo === 'estudiante' && (
+          <TouchableOpacity style={s.profesorBtn} onPress={() => setModalVisible(true)} activeOpacity={0.8}>
+            <Text style={s.profesorBtnTxt}>Tengo código de profesor</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Sign out */}
         <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut} activeOpacity={0.8}>
           <Text style={s.signOutText}>Cerrar sesión</Text>
@@ -147,6 +181,39 @@ export default function PerfilScreen() {
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* Modal código de invitación */}
+      <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
+        <View style={s.overlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>Activar rol de Profesor</Text>
+            <Text style={s.modalSub}>Ingresa tu código de invitación</Text>
+            <TextInput
+              style={s.modalInput}
+              placeholder="Código de invitación"
+              placeholderTextColor="#BBB"
+              value={codigo}
+              onChangeText={setCodigo}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+            <TouchableOpacity
+              style={[s.modalBtn, claiming && { opacity: 0.7 }]}
+              onPress={handleReclamarProfesor}
+              disabled={claiming}
+              activeOpacity={0.85}
+            >
+              {claiming
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={s.modalBtnTxt}>Activar</Text>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setModalVisible(false); setCodigo(''); }} style={{ marginTop: 12 }}>
+              <Text style={{ textAlign: 'center', color: '#999', fontSize: 13 }}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -245,4 +312,32 @@ const s = StyleSheet.create({
     borderRadius: 12, height: 48,
   },
   signOutText: { fontSize: 14, fontWeight: '700', color: '#E05A4E' },
+
+  profesorBtn: {
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: WHITE, borderWidth: 1, borderColor: 'rgba(43,76,114,0.3)',
+    borderRadius: 12, height: 48, marginBottom: 12,
+  },
+  profesorBtnTxt: { fontSize: 14, fontWeight: '700', color: NAVY },
+
+  overlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  modalCard: {
+    backgroundColor: WHITE, borderRadius: 16,
+    padding: 24, width: '100%',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111', marginBottom: 4 },
+  modalSub:   { fontSize: 13, color: '#888', marginBottom: 16 },
+  modalInput: {
+    backgroundColor: '#F5F5F5', borderWidth: 1, borderColor: '#E0E0E0',
+    borderRadius: 10, paddingHorizontal: 14, height: 48,
+    fontSize: 14, color: '#111', marginBottom: 16,
+  },
+  modalBtn: {
+    backgroundColor: NAVY, borderRadius: 10,
+    height: 48, alignItems: 'center', justifyContent: 'center',
+  },
+  modalBtnTxt: { fontSize: 14, fontWeight: '700', color: WHITE },
 });

@@ -1,79 +1,268 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TextInput,
   TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Radius, Spacing } from '../theme';
+import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
+import { useAuth } from '../context/AuthContext';
+import {
+  ensureVlingoUser,
+  fetchChatHistory,
+  sendChatMessage,
+  getSavedSessionId,
+  saveSessionId,
+  clearSessionId,
+} from '../lib/api';
 
-type Msg = { id: number; type: 'bot' | 'user' | 'fix'; text: string };
+type ChatScreenParams = {
+  sessionId?: string; // Sesion especifica desde el historial
+  fresh?: boolean;    // Iniciar conversación nueva
+};
 
-const INIT: Msg[] = [
-  { id: 1, type: 'bot',  text: 'Buenos días usuario, continuemos con nuestra preparación. Dime la situación para corregir errores' },
-  { id: 2, type: 'user', text: 'Sure, In my last job, two designers was arguing about the logo. I listen to both and suggested to combine their ideas' },
-  { id: 3, type: 'fix',  text: 'ese es un error clasico, "Listened" es la forma en pasado correcta de la palabra, ademas que la forma correcta es "were arguing"' },
-  { id: 4, type: 'user', text: 'Muchas gracias por corregir mis errores.' },
-];
+type MsgType = 'bot' | 'user' | 'error';
+type Msg = { id: number; type: MsgType; text: string };
 
-export default function ChatScreen({ navigation }: any) {
-  const [msgs, setMsgs] = useState<Msg[]>(INIT);
-  const [input, setInput] = useState('');
-  const ref = useRef<ScrollView>(null);
+const WELCOME: Msg = {
+  id: 0,
+  type: 'bot',
+  text: '¡Hola! Soy tu asistente de inglés. Cuéntame una situación, escribe en inglés o hazme cualquier pregunta.',
+};
 
-  const send = () => {
-    if (!input.trim()) return;
-    setMsgs(p => [...p, { id: Date.now(), type: 'user', text: input.trim() }]);
+function historyToMsgs(history: HistoryMsg[]): Msg[] {
+  return history.map(h => ({
+    id: h.id,
+    type: (h.role === 'user' ? 'user' : 'bot') as MsgType,
+    text: h.content,
+  }));
+}
+
+type HistoryMsg = { id: number; role: string; content: string };
+
+export default function ChatScreen() {
+  const { user }   = useAuth();
+  const navigation = useNavigation();
+  const route      = useRoute<RouteProp<{ ChatConversation: ChatScreenParams }, 'ChatConversation'>>();
+
+  const paramSessionId = route.params?.sessionId;
+  const paramFresh     = route.params?.fresh ?? false;
+
+  const [msgs, setMsgs]           = useState<Msg[]>([WELCOME]);
+  const [input, setInput]         = useState('');
+  const [sending, setSending]     = useState(false);
+
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [initErrorMsg, setInitErrorMsg] = useState('');
+
+  const [apiUserId, setApiUserId] = useState<string | null>(null);
+  const sessionIdRef              = useRef<string | undefined>(undefined);
+
+  const scrollRef = useRef<ScrollView>(null);
+
+  const scrollToEnd = useCallback(() => {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  }, []);
+
+  const initialize = useCallback(async () => {
+    if (!user) return;
+
+    setStatus('loading');
+    setInitErrorMsg('');
+    setMsgs([WELCOME]);
+    sessionIdRef.current = undefined;
+
+    try {
+      const name =
+        (user.user_metadata?.full_name as string | undefined) ??
+        user.email?.split('@')[0] ??
+        'Usuario';
+
+      // Obteniene/crear usuario válido en API
+      const userId = await ensureVlingoUser(name, user.email ?? undefined);
+      setApiUserId(userId);
+
+      // Determina qué sesión cargar según los parámetros de navegación
+      const targetSession = paramFresh
+        ? null
+        : paramSessionId ?? await getSavedSessionId();
+
+      if (targetSession) {
+        try {
+          const history = await fetchChatHistory(targetSession, userId);
+          if (history.length > 0) {
+            sessionIdRef.current = targetSession;
+            if (paramSessionId) await saveSessionId(paramSessionId);
+            setMsgs(historyToMsgs(history));
+          } else {
+            await clearSessionId();
+          }
+        } catch {
+          await clearSessionId();
+          sessionIdRef.current = undefined;
+          setMsgs([WELCOME]);
+        }
+      }
+
+      setStatus('ready');
+      scrollToEnd();
+    } catch (err: any) {
+      setInitErrorMsg(
+        err.message ?? 'No se pudo conectar con el servidor de IA',
+      );
+      setStatus('error');
+    }
+  }, [user, paramSessionId, paramFresh, scrollToEnd]);
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || sending || status !== 'ready' || !apiUserId) return;
+
     setInput('');
-    setTimeout(() => {
-      setMsgs(p => [...p, { id: Date.now() + 1, type: 'bot', text: '¡Muy bien! Sigamos practicando 😊' }]);
-    }, 700);
+    const userMsg: Msg = { id: Date.now(), type: 'user', text };
+    setMsgs(prev => [...prev, userMsg]);
+    setSending(true);
+    scrollToEnd();
+
+    try {
+      const data = await sendChatMessage(apiUserId, text, sessionIdRef.current);
+      if (data.sessionId !== sessionIdRef.current) {
+        sessionIdRef.current = data.sessionId;
+        await saveSessionId(data.sessionId);
+      }
+
+      setMsgs(prev => [
+        ...prev,
+        { id: Date.now(), type: 'bot', text: data.message },
+      ]);
+    } catch (err: any) {
+      setMsgs(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          type: 'error',
+          text: err.message ?? 'Error al contactar la IA.',
+        },
+      ]);
+    } finally {
+      setSending(false);
+      scrollToEnd();
+    }
   };
+
+  const confirmNewSession = () => {
+    Alert.alert(
+      'Nueva conversación',
+      '¿Empezar una conversación nueva? El historial se conserva en el servidor.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Nueva sesión',
+          style: 'destructive',
+          onPress: async () => {
+            await clearSessionId();
+            sessionIdRef.current = undefined;
+            setMsgs([WELCOME]);
+            setStatus('ready');
+          },
+        },
+      ],
+    );
+  };
+
+  const inputEnabled = status === 'ready' && !sending;
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation?.goBack()} style={s.backBtn}>
-          <Text style={s.backArrow}></Text>
+        <TouchableOpacity onPress={() => (navigation as any).goBack()} style={s.backBtn}>
+          <Text style={s.backArrow}>‹</Text>
         </TouchableOpacity>
-        <Text style={s.headerTitle}>ChatBot</Text>
-        <View style={{ width: 32 }} />
+        <Text style={s.headerTitle}>Vlingo</Text>
+        <TouchableOpacity
+          onPress={confirmNewSession}
+          style={s.newBtn}
+          disabled={status !== 'ready'}
+        >
+          <Text style={[s.newBtnText, status !== 'ready' && { color: '#ccc' }]}>
+            + Nuevo
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <ScrollView
-          ref={ref}
+          ref={scrollRef}
           contentContainerStyle={s.msgs}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => ref.current?.scrollToEnd({ animated: true })}
+          onContentSizeChange={scrollToEnd}
         >
-          <Text style={s.timeLabel}>hoy, 9:41</Text>
+          {/* ── Estado de carga ── */}
+          {status === 'loading' && (
+            <View style={s.centerCol}>
+              <ActivityIndicator size="large" color="#2B4C72" />
+              <Text style={s.statusText}>Preparando el asistente...</Text>
+            </View>
+          )}
 
-          {msgs.map(m => (
+          {/* ── Error de inicialización con reintento ── */}
+          {status === 'error' && (
+            <View style={s.errorCard}>
+              <Text style={s.errorCardTitle}>No se pudo conectar</Text>
+              <Text style={s.errorCardBody}>{initErrorMsg}</Text>
+              <TouchableOpacity style={s.retryBtn} onPress={initialize}>
+                <Text style={s.retryBtnText}>Reintentar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── Mensajes ── */}
+          {status === 'ready' && msgs.map(m => (
             <View key={m.id} style={m.type === 'user' ? s.rowRight : s.rowLeft}>
-              {m.type === 'fix' ? (
-                <View style={s.fixBubble}>
-                  <Text style={s.fixText}>{m.text}</Text>
-                </View>
-              ) : (
-                <View style={[s.bubble, m.type === 'user' ? s.bubbleUser : s.bubbleBot]}>
-                  <Text style={[s.bubbleText, m.type === 'user' && s.bubbleTextUser]}>
-                    {m.text}
-                  </Text>
-                </View>
-              )}
+              <View
+                style={[
+                  s.bubble,
+                  m.type === 'user'   ? s.bubbleUser  :
+                  m.type === 'error'  ? s.bubbleError :
+                  s.bubbleBot,
+                ]}
+              >
+                <Text
+                  style={[
+                    s.bubbleText,
+                    m.type === 'user'  && s.bubbleTextUser,
+                    m.type === 'error' && s.bubbleTextError,
+                  ]}
+                >
+                  {m.text}
+                </Text>
+              </View>
             </View>
           ))}
+
+          {/* ── Indicador de escritura ── */}
+          {sending && (
+            <View style={s.rowLeft}>
+              <View style={[s.bubble, s.bubbleBot, s.typingBubble]}>
+                <ActivityIndicator size="small" color="#2B4C72" />
+                <Text style={s.typingText}>Escribiendo...</Text>
+              </View>
+            </View>
+          )}
 
           <View style={{ height: 8 }} />
         </ScrollView>
 
-        {/* Input bar */}
+        {/* ── Barra de entrada ── */}
         <View style={s.inputBar}>
           <View style={s.inputIcon}>
             <Text style={{ fontSize: 18 }}>⌨️</Text>
@@ -82,13 +271,19 @@ export default function ChatScreen({ navigation }: any) {
             style={s.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Escribe un mensaje..."
+            placeholder={inputEnabled ? 'Escribe un mensaje...' : 'Conectando...'}
             placeholderTextColor="#999"
             returnKeyType="send"
             onSubmitEditing={send}
             multiline
+            editable={inputEnabled}
           />
-          <TouchableOpacity style={s.sendBtn} onPress={send} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={[s.sendBtn, !inputEnabled && s.sendBtnDisabled]}
+            onPress={send}
+            activeOpacity={0.8}
+            disabled={!inputEnabled}
+          >
             <Text style={{ color: '#fff', fontSize: 16 }}>➤</Text>
           </TouchableOpacity>
         </View>
@@ -97,10 +292,10 @@ export default function ChatScreen({ navigation }: any) {
   );
 }
 
+/* ── Estilos ──────────────────────────────────────────────────────── */
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F2F4F6' },
 
-  // Header (nuevo, como en el Figma)
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -108,46 +303,81 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: '#F2F4F6',
-    borderBottomWidth: 0,
   },
-  backBtn: { width: 32, alignItems: 'flex-start' },
-  backArrow: { fontSize: 22, color: '#111', fontWeight: '400' },
+  backBtn:     { width: 48, alignItems: 'flex-start' },
+  backArrow:   { fontSize: 22, color: '#111' },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#111' },
+  newBtn:      { width: 64, alignItems: 'flex-end' },
+  newBtnText:  { fontSize: 13, color: '#2B4C72', fontWeight: '600' },
 
-  // Messages
   msgs: { padding: 16, paddingTop: 8 },
-  timeLabel: { textAlign: 'center', fontSize: 11, color: '#AAA', marginBottom: 20 },
+
+  centerCol: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 40,
+  },
+  statusText: { fontSize: 13, color: '#888', marginTop: 8 },
+
+  errorCard: {
+    backgroundColor: '#FFF0F0',
+    borderRadius: 12,
+    padding: 20,
+    margin: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFCCCC',
+    gap: 8,
+  },
+  errorCardTitle: { fontSize: 15, fontWeight: '700', color: '#C00' },
+  errorCardBody:  { fontSize: 13, color: '#C00', textAlign: 'center' },
+  retryBtn: {
+    marginTop: 8,
+    backgroundColor: '#2B4C72',
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  retryBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 
   rowLeft:  { alignItems: 'flex-start', marginBottom: 12 },
   rowRight: { alignItems: 'flex-end',   marginBottom: 12 },
 
-  bubble: { maxWidth: '76%', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 18 },
+  bubble: {
+    maxWidth: '76%',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+  },
   bubbleBot: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 4,
-    // subtle shadow
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
-  bubbleUser: {
-    backgroundColor: '#2B4C72',
-    borderTopRightRadius: 4,
+  bubbleUser:  { backgroundColor: '#2B4C72', borderTopRightRadius: 4 },
+  bubbleError: {
+    backgroundColor: '#FFF0F0',
+    borderTopLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: '#FFCCCC',
   },
-  bubbleText: { fontSize: 13, color: '#222', lineHeight: 20 },
-  bubbleTextUser: { color: '#fff' },
+  bubbleText:      { fontSize: 13, color: '#222', lineHeight: 20 },
+  bubbleTextUser:  { color: '#fff' },
+  bubbleTextError: { color: '#C00' },
 
-  // Fix bubble — same as bot but text slightly muted
-  fixBubble: {
-    maxWidth: '82%',
-    paddingHorizontal: 14, paddingVertical: 12,
-    borderRadius: 18, borderTopLeftRadius: 4,
-    backgroundColor: '#fff',
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
+  typingBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
   },
-  fixText: { fontSize: 13, color: '#444', lineHeight: 20 },
+  typingText: { fontSize: 12, color: '#888' },
 
-  // Input bar
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -168,8 +398,12 @@ const s = StyleSheet.create({
     maxHeight: 100,
   },
   sendBtn: {
-    width: 38, height: 38, borderRadius: 19,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#2B4C72',
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  sendBtnDisabled: { backgroundColor: '#B0BEC5' },
 });

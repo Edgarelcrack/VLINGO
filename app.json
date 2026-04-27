@@ -11,7 +11,8 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0e0e0e"
-      }
+      },
+      "usesCleartextTraffic": true
     },
     "ios": {
       "supportsTablet": false

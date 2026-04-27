@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import HomeScreen           from '../screens/HomeScreen';
 import ChatScreen           from '../screens/ChatScreen';
+import ChatHistoryScreen    from '../screens/ChatHistoryScreen';
 import CursoScreen          from '../screens/CursoScreen';
 import ParteCursoScreen     from '../screens/ParteCursoScreen';
 import PerfilScreen         from '../screens/PerfilScreen';
@@ -53,6 +54,15 @@ function LessonsStack() {
     <Stack.Navigator screenOptions={screenOpts}>
       <Stack.Screen name="Curso" component={CursoScreen}      options={{ title: 'Business Vocabulary' }} />
       <Stack.Screen name="Parte" component={ParteCursoScreen} options={{ title: 'Business Vocabulary' }} />
+    </Stack.Navigator>
+  );
+}
+
+function ChatStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ChatHistory"      component={ChatHistoryScreen} />
+      <Stack.Screen name="ChatConversation" component={ChatScreen} />
     </Stack.Navigator>
   );
 }
@@ -106,9 +116,9 @@ function AppTabs() {
       />
       <Tab.Screen
         name="ChatTab"
-        component={ChatScreen}
+        component={ChatStack}
         options={{
-          title: 'ChatBot IA',
+          headerShown: false,
           tabBarLabel: 'Chat',
           tabBarIcon: ({ focused, color }) =>
             <Ionicons name={focused ? 'chatbubble' : 'chatbubble-outline'} size={22} color={color} />,

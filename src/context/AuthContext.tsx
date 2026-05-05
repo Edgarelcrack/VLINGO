@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { UserProfile, TipoUsuario } from '../types';
@@ -170,6 +171,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    await AsyncStorage.multiRemove([
+      'vlingo_api_user_id',
+      'vlingo_session_id',
+      'vlingo_api_email',
+    ]);
     await supabase.auth.signOut();
   };
 

@@ -2,8 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '@env';
 
 const BASE = API_URL;
-const KEY_USER_ID    = 'vlingo_api_user_id';
-const KEY_SESSION_ID = 'vlingo_session_id';
+const KEY_USER_ID      = 'vlingo_api_user_id';
+const KEY_SESSION_ID   = 'vlingo_session_id';
+const KEY_STORED_EMAIL = 'vlingo_api_email';
 
 export type ChatResponse = {
   sessionId: string;
@@ -51,30 +52,40 @@ async function userExistsInApi(userId: string): Promise<boolean> {
   }
 }
 
-async function createUser(name: string, email?: string): Promise<string> {
-  const data = await post<{ user: { id: string } }>(
-    '/api/progress/user',
-    { name, email },
-  );
-  const id = data.user.id;
-  await AsyncStorage.setItem(KEY_USER_ID, id);
-  return id;
-}
-
 export async function ensureVlingoUser(
   name: string,
   email?: string,
 ): Promise<string> {
-  const stored = await AsyncStorage.getItem(KEY_USER_ID);
+  const storedId    = await AsyncStorage.getItem(KEY_USER_ID);
+  const storedEmail = await AsyncStorage.getItem(KEY_STORED_EMAIL);
 
-  if (stored) {
-    const stillExists = await userExistsInApi(stored);
-    if (stillExists) return stored;
-
-    await AsyncStorage.multiRemove([KEY_USER_ID, KEY_SESSION_ID]);
+  // Si es el mismo usuario, se guarda el ID en caché y aún válido en el servidor
+  if (storedId && email && storedEmail === email) {
+    const stillExists = await userExistsInApi(storedId);
+    if (stillExists) return storedId;
   }
 
-  return createUser(name, email);
+  // En caso de no encontrarse en caché o no ser el mismo usuario, resolver desde la API (upsert por email → siempre retorna el usuario correcto)
+  const data = await post<{ user: { id: string } }>('/api/progress/user', { name, email });
+  const newId = data.user.id;
+
+  if (storedId && storedId !== newId) {
+    // Siempre que se cambie de cuenta se triggerea esto, limpiar sesión anterior para no mostrar mensajes de otro usuario
+    await AsyncStorage.removeItem(KEY_SESSION_ID);
+  }
+
+  await AsyncStorage.multiSet([
+    [KEY_USER_ID,      newId],
+    [KEY_STORED_EMAIL, email ?? ''],
+  ]);
+
+  return newId;
+}
+
+export async function startNewSession(userId: string): Promise<string> {
+  const data = await post<{ sessionId: string }>('/api/chat/new-session', { userId });
+  await AsyncStorage.setItem(KEY_SESSION_ID, data.sessionId);
+  return data.sessionId;
 }
 
 export async function getSavedSessionId(): Promise<string | null> {

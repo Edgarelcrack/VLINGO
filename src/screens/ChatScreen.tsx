@@ -14,10 +14,11 @@ import {
   getSavedSessionId,
   saveSessionId,
   clearSessionId,
+  startNewSession,
 } from '../lib/api';
 
 type ChatScreenParams = {
-  sessionId?: string; // Sesion especifica desde el historial
+  sessionId?: string;
   fresh?: boolean;    // Iniciar conversación nueva
 };
 
@@ -164,8 +165,18 @@ export default function ChatScreen() {
           text: 'Nueva sesión',
           style: 'destructive',
           onPress: async () => {
-            await clearSessionId();
-            sessionIdRef.current = undefined;
+            if (apiUserId) {
+              try {
+                const newId = await startNewSession(apiUserId);
+                sessionIdRef.current = newId;
+              } catch {
+                await clearSessionId();
+                sessionIdRef.current = undefined;
+              }
+            } else {
+              await clearSessionId();
+              sessionIdRef.current = undefined;
+            }
             setMsgs([WELCOME]);
             setStatus('ready');
           },

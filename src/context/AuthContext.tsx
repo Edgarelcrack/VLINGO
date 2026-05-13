@@ -22,6 +22,7 @@ type AuthContextType = {
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   reclamarProfesor: (codigoInvitacion: string) => Promise<{ error: string | null }>;
+  refreshProfile: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -187,6 +188,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: null };
   };
 
+  const refreshProfile = async () => {
+    if (!user) return;
+    await fetchProfile(user.id);
+  };
+
   const reclamarProfesor = async (codigoInvitacion: string) => {
     if (!user) return { error: 'No hay sesión activa' };
     const { valido, codigoId } = await validarCodigoInvitacion(codigoInvitacion.trim(), 'profesor');
@@ -202,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, userProfile, loading, signUp, signIn, signOut, resetPassword, reclamarProfesor }}>
+    <AuthContext.Provider value={{ session, user, userProfile, loading, signUp, signIn, signOut, resetPassword, reclamarProfesor, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -76,6 +76,105 @@ export const eliminarCurso = async (id: string): Promise<{ error: string | null 
   return { error: error?.message ?? null };
 };
 
+export const getCurso = async (
+  id: string
+): Promise<{ data: Curso | null; error: string | null }> => {
+  const { data, error } = await supabase.from('curso').select('*').eq('id', id).maybeSingle();
+  return { data: data as Curso | null, error: error?.message ?? null };
+};
+
+export type StatsCurso = {
+  totalSecciones: number;
+  totalLecciones: number;
+  totalPreguntas: number;
+};
+
+export const getStatsCurso = async (cursoId: string): Promise<StatsCurso> => {
+  const { data: secciones } = await supabase
+    .from('seccion')
+    .select('id, tipo')
+    .eq('curso_id', cursoId);
+
+  const lst = (secciones as { id: string; tipo: string }[] | null) ?? [];
+  const ids = lst.map(s => s.id);
+  const totalSecciones = lst.filter(s => s.tipo === 'seccion').length;
+  const totalLecciones = lst.filter(s => s.tipo === 'leccion').length;
+
+  if (ids.length === 0) {
+    return { totalSecciones, totalLecciones, totalPreguntas: 0 };
+  }
+
+  const { count } = await supabase
+    .from('pregunta')
+    .select('id', { count: 'exact', head: true })
+    .in('seccion_id', ids);
+
+  return { totalSecciones, totalLecciones, totalPreguntas: count ?? 0 };
+};
+
+export const contarPreguntasPorSecciones = async (
+  seccionIds: string[]
+): Promise<Record<string, number>> => {
+  if (seccionIds.length === 0) return {};
+  const { data } = await supabase
+    .from('pregunta')
+    .select('seccion_id')
+    .in('seccion_id', seccionIds);
+  const map: Record<string, number> = {};
+  ((data as { seccion_id: string }[] | null) ?? []).forEach(p => {
+    map[p.seccion_id] = (map[p.seccion_id] ?? 0) + 1;
+  });
+  return map;
+};
+
+export const moverSeccion = async (
+  id: string,
+  direccion: 'arriba' | 'abajo'
+): Promise<{ error: string | null }> => {
+  const { data: actual } = await supabase
+    .from('seccion')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (!actual) return { error: 'Sección no encontrada' };
+
+  let q = supabase
+    .from('seccion')
+    .select('*')
+    .eq('curso_id', actual.curso_id);
+  q = actual.parent_id === null ? q.is('parent_id', null) : q.eq('parent_id', actual.parent_id);
+
+  const { data: hermanas } = await q.order('orden');
+  const lista = (hermanas as Seccion[] | null) ?? [];
+  const idx = lista.findIndex(s => s.id === id);
+  if (idx === -1) return { error: 'Posición no encontrada' };
+
+  const objetivo = direccion === 'arriba' ? idx - 1 : idx + 1;
+  if (objetivo < 0 || objetivo >= lista.length) return { error: null };
+
+  const otro = lista[objetivo];
+  const ordenA = actual.orden;
+  const ordenB = otro.orden;
+
+  const { error: e1 } = await supabase
+    .from('seccion').update({ orden: ordenB }).eq('id', actual.id);
+  if (e1) return { error: e1.message };
+  const { error: e2 } = await supabase
+    .from('seccion').update({ orden: ordenA }).eq('id', otro.id);
+  return { error: e2?.message ?? null };
+};
+
+
+export const getSeccion = async (
+  id: string
+): Promise<{ data: Seccion | null; error: string | null }> => {
+  const { data, error } = await supabase
+    .from('seccion')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  return { data: data as Seccion | null, error: error?.message ?? null };
+};
 
 export const getSecciones = async (
   cursoId: string
@@ -210,4 +309,90 @@ export const inicializarProgreso = async (
       { usuario_id: userId, seccion_id: secciones[0].id, estado: 'active' },
       { onConflict: 'usuario_id,seccion_id' }
     );
+};
+
+const getEstadoActual = async (
+  userId: string,
+  seccionId: string
+): Promise<EstadoSeccion | null> => {
+  const { data } = await supabase
+    .from('progreso_usuario')
+    .select('estado')
+    .eq('usuario_id', userId)
+    .eq('seccion_id', seccionId)
+    .maybeSingle();
+  return (data?.estado as EstadoSeccion) ?? null;
+};
+
+const getHermanas = async (
+  cursoId: string,
+  parentId: string | null
+): Promise<Seccion[]> => {
+  let q = supabase.from('seccion').select('*').eq('curso_id', cursoId);
+  q = parentId === null ? q.is('parent_id', null) : q.eq('parent_id', parentId);
+  const { data } = await q.order('orden');
+  return (data as Seccion[]) ?? [];
+};
+
+export const XP_POR_SECCION = 10;
+
+const otorgarXP = async (userId: string, monto: number): Promise<void> => {
+  const { error } = await supabase.rpc('incrementar_xp', {
+    p_user_id: userId,
+    p_monto: monto,
+  });
+  if (error) console.warn('[otorgarXP] error:', error.message);
+};
+
+export const marcarCompletadaYAvanzar = async (
+  userId: string,
+  seccionId: string
+): Promise<{ error: string | null; xpGanado: number }> => {
+  const estadoPrevio = await getEstadoActual(userId, seccionId);
+  if (estadoPrevio === 'done') {
+    return { error: null, xpGanado: 0 };
+  }
+
+  const { error: errDone } = await upsertProgreso(userId, seccionId, 'done');
+  if (errDone) return { error: errDone, xpGanado: 0 };
+
+  await otorgarXP(userId, XP_POR_SECCION);
+  let xpGanado = XP_POR_SECCION;
+
+  const { data: actual } = await supabase
+    .from('seccion')
+    .select('*')
+    .eq('id', seccionId)
+    .maybeSingle();
+  if (!actual) return { error: null, xpGanado };
+
+  const hermanas = await getHermanas(actual.curso_id, actual.parent_id);
+  const siguiente = hermanas.find(h => h.orden > actual.orden);
+
+  if (siguiente) {
+    const estadoSig = await getEstadoActual(userId, siguiente.id);
+    if (estadoSig !== 'done' && estadoSig !== 'active') {
+      await upsertProgreso(userId, siguiente.id, 'active');
+    }
+    return { error: null, xpGanado };
+  }
+
+  if (actual.parent_id) {
+    const ids = hermanas.map(h => h.id);
+    const { data: progs } = await supabase
+      .from('progreso_usuario')
+      .select('seccion_id, estado')
+      .eq('usuario_id', userId)
+      .in('seccion_id', ids);
+    const doneCount = (progs ?? []).filter(p => p.estado === 'done').length;
+    if (doneCount === ids.length) {
+      const cascada = await marcarCompletadaYAvanzar(userId, actual.parent_id);
+      return {
+        error: cascada.error,
+        xpGanado: xpGanado + cascada.xpGanado,
+      };
+    }
+  }
+
+  return { error: null, xpGanado };
 };

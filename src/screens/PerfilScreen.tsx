@@ -3,9 +3,8 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 
-const STATS = [
+const STATS_PLACEHOLDER = [
   { num: '24',  label: 'Días\nactivo' },
-  { num: '142', label: 'Lecciones\nhechas' },
   { num: '87%', label: 'Precisión\npromedio' },
 ];
 
@@ -97,7 +96,11 @@ export default function PerfilScreen() {
         </View>
 
         <View style={s.statsRow}>
-          {STATS.map(st => (
+          <View style={[s.statCard, s.statCardXP]}>
+            <Text style={[s.statNum, s.statNumXP]}>{userProfile?.xp_total ?? 0}</Text>
+            <Text style={[s.statLabel, s.statLabelXP]}>XP{'\n'}total</Text>
+          </View>
+          {STATS_PLACEHOLDER.map(st => (
             <View key={st.label} style={s.statCard}>
               <Text style={s.statNum}>{st.num}</Text>
               <Text style={s.statLabel}>{st.label}</Text>
@@ -249,6 +252,9 @@ const s = StyleSheet.create({
   },
   statNum: { fontSize: 22, fontWeight: '800', color: '#2B4C72', marginBottom: 4 },
   statLabel: { fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '700', textAlign: 'center' },
+  statCardXP: { backgroundColor: '#FFF6E0' },
+  statNumXP: { color: '#B8860B' },
+  statLabelXP: { color: '#B8860B' },
 
   section: {
     fontSize: 11, color: '#AAA',

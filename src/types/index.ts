@@ -9,6 +9,7 @@ export type UserProfile = {
   nivel: string | null;
   tipo: TipoUsuario;
   fecha_registro: string;
+  xp_total: number;
 };
 
 export type Curso = {
@@ -56,4 +57,18 @@ export type ProgresoUsuario = {
   seccion_id: string;
   estado: EstadoSeccion;
   completado_en: string | null;
+};
+
+export type TipoPregunta = 'opcion_multiple' | 'completar_frase';
+
+export type Pregunta = {
+  id: string;
+  seccion_id: string;
+  tipo: TipoPregunta;
+  enunciado: string;
+  opciones: string[];
+  respuesta_correcta: number;
+  orden: number;
+  creado_por: string | null;
+  fecha_creacion: string;
 };

@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { getCursos } from '../services/cursosService';
 import { Curso } from '../types';
@@ -73,15 +74,21 @@ export default function HomeScreen({ navigation }: any) {
         <View style={s.mainCard}>
           <View style={s.levelRow}>
             <View style={s.levelIconWrap}>
-              <Text style={{ fontSize: 16 }}></Text>
+              <Ionicons name="school" size={18} color="#2B4C72" />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={s.levelLabel}>Aprendizaje actual</Text>
               <Text style={s.levelValue}>
                 {userProfile?.nivel ? `Nivel ${userProfile.nivel}` : 'Nivel no asignado'}
                 {isProfesor ? `  ·  ${userProfile?.tipo === 'administrador' ? 'Administrador' : 'Profesor'}` : ''}
               </Text>
             </View>
+            {!isProfesor && (
+              <View style={s.xpPill}>
+                <Ionicons name="flash" size={14} color="#B8860B" />
+                <Text style={s.xpPillTxt}>{userProfile?.xp_total ?? 0} XP</Text>
+              </View>
+            )}
           </View>
           <View style={s.divider} />
           {skills.map(sk => (
@@ -205,6 +212,12 @@ const s = StyleSheet.create({
   levelIconWrap:  { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center' },
   levelLabel:     { fontSize: 11, color: '#999', marginBottom: 2 },
   levelValue:     { fontSize: 14, fontWeight: '700', color: '#111' },
+  xpPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FFF6E0', borderRadius: 100,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  xpPillTxt: { fontSize: 12, fontWeight: '800', color: '#B8860B' },
   divider:        { height: 1, backgroundColor: '#F0F0F0', marginBottom: 14 },
 
   skillRow:       { marginBottom: 12 },

@@ -1,54 +1,159 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, Animated, Easing,
+  StyleSheet, ActivityIndicator, ToastAndroid, Platform, Alert,
+  LayoutAnimation,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import {
-  getSecciones, getProgresoPorCurso, upsertProgreso,
+  getSecciones, getProgresoPorCurso, marcarCompletadaYAvanzar, upsertProgreso,
 } from '../services/cursosService';
-import { Seccion, ProgresoUsuario, EstadoSeccion, ContenidoBloque } from '../types';
+import { getPreguntasPorSeccion } from '../services/preguntasService';
+import { Seccion, ProgresoUsuario, EstadoSeccion, ContenidoBloque, Pregunta } from '../types';
 
 type SeccionConEstado = Seccion & { estado: EstadoSeccion };
 
-const ACTIVE_BG = '#1E2D3D';
+const expandPreset = () =>
+  LayoutAnimation.configureNext({
+    duration: 240,
+    create:  { type: 'easeInEaseOut', property: 'opacity' },
+    update:  { type: 'easeInEaseOut' },
+    delete:  { type: 'easeInEaseOut', property: 'opacity' },
+  });
+
+function FadeInView({
+  children, delay = 0, style,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  style?: any;
+}) {
+  const opacity   = useRef(new Animated.Value(0)).current;
+  const translate = useRef(new Animated.Value(14)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity,   { toValue: 1, duration: 360, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(translate, { toValue: 0, duration: 360, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  }, [opacity, translate, delay]);
+
+  return (
+    <Animated.View style={[style, { opacity, transform: [{ translateY: translate }] }]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+function AnimatedBar({
+  pct, color, trackColor, height = 8,
+}: {
+  pct: number;
+  color: string;
+  trackColor: string;
+  height?: number;
+}) {
+  const width = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(width, {
+      toValue: pct,
+      duration: 800,
+      delay: 250,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [pct, width]);
+
+  return (
+    <View style={{ height, backgroundColor: trackColor, borderRadius: 100, overflow: 'hidden' }}>
+      <Animated.View
+        style={{
+          height, borderRadius: 100, backgroundColor: color,
+          width: width.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
+        }}
+      />
+    </View>
+  );
+}
 
 export default function ParteCursoScreen({ navigation, route }: any) {
   const { seccionId, cursoId, titulo } = route?.params ?? {};
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
+  const insets = useSafeAreaInsets();
 
-  const [hijos, setHijos]       = useState<SeccionConEstado[]>([]);
-  const [seccion, setSeccion]   = useState<Seccion | null>(null);
-  const [loading, setLoading]   = useState(true);
-  const [open, setOpen]         = useState<string | null>(null);
+  const notificarXP = (monto: number) => {
+    if (monto <= 0) return;
+    const msg = `+${monto} XP ganados`;
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(msg, ToastAndroid.SHORT);
+    } else {
+      Alert.alert('¡Bien hecho!', msg);
+    }
+  };
+
+  const [hijos, setHijos]               = useState<SeccionConEstado[]>([]);
+  const [seccion, setSeccion]           = useState<Seccion | null>(null);
+  const [seccionEstado, setSeccionEstado] = useState<EstadoSeccion>('locked');
+  const [preguntasMap, setPreguntasMap] = useState<Record<string, Pregunta[]>>({});
+  const [loading, setLoading]           = useState(true);
+  const [open, setOpen]                 = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!cursoId || !user) return;
 
-    // Get all course sections
     const { data: todasSecciones } = await getSecciones(cursoId);
     const actual = todasSecciones.find(s => s.id === seccionId) ?? null;
     setSeccion(actual);
 
-    // Children of this section
-    const children = todasSecciones.filter(s => s.parent_id === seccionId);
+    const { data: progreso } = await getProgresoPorCurso(user.id, cursoId);
+    const progresoMap: Record<string, EstadoSeccion> = {};
+    (progreso as ProgresoUsuario[]).forEach(p => { progresoMap[p.seccion_id] = p.estado; });
+
+    const estadoActual = progresoMap[seccionId] ?? 'locked';
+    setSeccionEstado(estadoActual);
+
+    const children = todasSecciones
+      .filter(s => s.parent_id === seccionId)
+      .sort((a, b) => a.orden - b.orden);
 
     if (children.length > 0) {
-      const { data: progreso } = await getProgresoPorCurso(user.id, cursoId);
-      const progresoMap: Record<string, EstadoSeccion> = {};
-      (progreso as ProgresoUsuario[]).forEach(p => { progresoMap[p.seccion_id] = p.estado; });
+      // Si la sección padre está activa o completa pero ninguna hija tiene
+      // progreso registrado, activar la primera hija para desbloquear el flujo.
+      const padreDesbloqueado = estadoActual === 'active' || estadoActual === 'done';
+      const algunaHijaConProgreso = children.some(c => progresoMap[c.id]);
+      if (padreDesbloqueado && !algunaHijaConProgreso) {
+        await upsertProgreso(user.id, children[0].id, 'active');
+        progresoMap[children[0].id] = 'active';
+      }
 
       const conEstado: SeccionConEstado[] = children.map(s => ({
         ...s,
         estado: progresoMap[s.id] ?? 'locked',
       }));
       setHijos(conEstado);
-      // Auto-open the first done section
-      const firstDone = conEstado.find(s => s.estado === 'done');
-      if (firstDone) setOpen(firstDone.id);
+      const firstActive = conEstado.find(s => s.estado === 'active');
+      const firstDone   = conEstado.find(s => s.estado === 'done');
+      if (firstActive) setOpen(firstActive.id);
+      else if (firstDone) setOpen(firstDone.id);
+
+      // Cargar preguntas de cada hija en paralelo
+      const entradas = await Promise.all(
+        children.map(async c => {
+          const { data } = await getPreguntasPorSeccion(c.id);
+          return [c.id, data] as const;
+        })
+      );
+      const mapa: Record<string, Pregunta[]> = {};
+      entradas.forEach(([id, list]) => { mapa[id] = list; });
+      setPreguntasMap(mapa);
     } else {
       setHijos([]);
+      // Caso B (lección hoja): cargar preguntas de la sección actual
+      const { data } = await getPreguntasPorSeccion(seccionId);
+      setPreguntasMap({ [seccionId]: data });
     }
   }, [seccionId, cursoId, user]);
 
@@ -58,8 +163,9 @@ export default function ParteCursoScreen({ navigation, route }: any) {
 
   const marcarCompletado = async (secId: string) => {
     if (!user) return;
-    await upsertProgreso(user.id, secId, 'done');
-    // Refresh to reflect new state
+    const { xpGanado } = await marcarCompletadaYAvanzar(user.id, secId);
+    notificarXP(xpGanado);
+    await refreshProfile();
     load();
   };
 
@@ -73,17 +179,48 @@ export default function ParteCursoScreen({ navigation, route }: any) {
 
   // ── Case A: section has children — show expandable list ──────────────────────
   if (hijos.length > 0) {
+    const hijosDone = hijos.filter(h => h.estado === 'done').length;
+    const hijosPct  = hijos.length > 0 ? Math.round((hijosDone / hijos.length) * 100) : 0;
+
     return (
       <SafeAreaView style={s.safe} edges={['top']}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation?.goBack()} style={s.backBtn}>
-            <Text style={s.backArrow}>←</Text>
+            <Ionicons name="arrow-back" size={22} color="#111" />
           </TouchableOpacity>
-          <Text style={s.headerTitle} numberOfLines={1}>{titulo ?? seccion?.titulo ?? 'Parte'}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.headerTitle} numberOfLines={1}>{titulo ?? seccion?.titulo ?? 'Parte'}</Text>
+          </View>
           <View style={{ width: 32 }} />
         </View>
 
-        <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Progress overview */}
+          <FadeInView>
+            <View style={s.progCard}>
+              <View style={s.progTop}>
+                <View style={s.progIconWrap}>
+                  <Ionicons name="trophy" size={18} color="#B8860B" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.progLabel}>Tu progreso en esta parte</Text>
+                  <Text style={s.progValue}>
+                    {hijosDone} <Text style={s.progValueDim}>de {hijos.length} {hijos.length === 1 ? 'lección' : 'lecciones'}</Text>
+                  </Text>
+                </View>
+                <Text style={s.progPct}>{hijosPct}%</Text>
+              </View>
+              <AnimatedBar pct={hijosPct} color="#FFD66A" trackColor="rgba(255,255,255,0.15)" />
+            </View>
+          </FadeInView>
+
+          <FadeInView delay={120}>
+            <Text style={s.subLabel}>Lecciones</Text>
+          </FadeInView>
+
           {hijos.map((h, i) => {
             const isOpen   = open === h.id;
             const isActive = h.estado === 'active';
@@ -92,51 +229,106 @@ export default function ParteCursoScreen({ navigation, route }: any) {
             const bloques  = h.contenido?.bloques ?? [];
 
             return (
-              <View key={h.id} style={[s.card, isActive && s.cardActive, isLocked && s.cardLocked]}>
+              <FadeInView key={h.id} delay={180 + i * 80}>
+              <View style={[s.lecCard, isActive && s.lecCardActive, isLocked && s.lecCardLocked]}>
                 <TouchableOpacity
-                  style={s.cardTop}
+                  style={s.lecHead}
                   activeOpacity={isLocked ? 1 : 0.75}
-                  onPress={() => !isLocked && setOpen(isOpen ? null : h.id)}
+                  onPress={() => {
+                    if (isLocked) return;
+                    expandPreset();
+                    setOpen(isOpen ? null : h.id);
+                  }}
                 >
-                  <Text style={[s.cardNum, isActive && s.cardNumActive]}>Parte {i + 1}</Text>
-                  <View style={[s.dot, isDone && s.dotDone, isActive && s.dotActive, isLocked && s.dotLocked]} />
-                  <Text style={[s.cardName, isActive && s.cardNameActive, isLocked && s.cardNameLocked]}>
-                    {h.titulo}
-                  </Text>
+                  <View style={[
+                    s.lecNum,
+                    isDone   && s.lecNumDone,
+                    isActive && s.lecNumActive,
+                    isLocked && s.lecNumLocked,
+                  ]}>
+                    {isDone ? (
+                      <Ionicons name="checkmark" size={18} color="#fff" />
+                    ) : isLocked ? (
+                      <Ionicons name="lock-closed" size={14} color="#BBB" />
+                    ) : (
+                      <Text style={[s.lecNumTxt, isActive && { color: '#fff' }]}>{i + 1}</Text>
+                    )}
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.lecLabel, isActive && s.lecLabelActive]}>
+                      Lección {i + 1}
+                    </Text>
+                    <Text style={[s.lecName, isActive && s.lecNameActive, isLocked && s.lecNameLocked]} numberOfLines={2}>
+                      {h.titulo}
+                    </Text>
+                    <View style={s.lecStatus}>
+                      {isDone && (
+                        <>
+                          <Ionicons name="checkmark-circle" size={12} color="#3FA776" />
+                          <Text style={[s.lecStatusTxt, { color: '#2E7D52' }]}>Completada</Text>
+                        </>
+                      )}
+                      {isActive && (
+                        <>
+                          <View style={s.lecDot} />
+                          <Text style={[s.lecStatusTxt, { color: '#FFE39C' }]}>En progreso</Text>
+                        </>
+                      )}
+                      {isLocked && (
+                        <>
+                          <Ionicons name="lock-closed" size={11} color="#BBB" />
+                          <Text style={[s.lecStatusTxt, { color: '#BBB' }]}>Bloqueada</Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
+
                   {isActive ? (
-                    <View style={s.playBtn}><Text style={{ color: '#fff', fontSize: 12 }}>▶</Text></View>
-                  ) : isDone ? (
-                    <Text style={s.chevron}>{isOpen ? '▼' : '›'}</Text>
-                  ) : (
-                    <Text style={s.chevronLocked}>›</Text>
-                  )}
+                    <View style={s.playBtn}>
+                      <Ionicons name="play" size={14} color="#fff" />
+                    </View>
+                  ) : !isLocked ? (
+                    <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#888" />
+                  ) : null}
                 </TouchableOpacity>
 
-                {isOpen && bloques.length > 0 && (
+                {isOpen && (
                   <View style={s.expanded}>
-                    <BloquesRenderer bloques={bloques} />
+                    <View style={s.divider} />
+                    {bloques.length > 0 ? (
+                      <BloquesRenderer bloques={bloques} />
+                    ) : (
+                      <View style={s.noContent}>
+                        <Ionicons name="document-outline" size={20} color="#BBB" />
+                        <Text style={s.noContentTxt}>Esta lección no tiene contenido todavía</Text>
+                      </View>
+                    )}
+                    <QuizSection preguntas={preguntasMap[h.id] ?? []} />
                     {isActive && (
                       <TouchableOpacity
                         style={s.completarBtn}
                         onPress={() => marcarCompletado(h.id)}
+                        activeOpacity={0.85}
                       >
-                        <Text style={s.completarTxt}>Marcar como completado ✓</Text>
+                        <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                        <Text style={s.completarTxt}>Marcar como completada</Text>
                       </TouchableOpacity>
+                    )}
+                    {isDone && (
+                      <View style={s.completadoBadge}>
+                        <Ionicons name="trophy" size={16} color="#B8860B" />
+                        <Text style={s.completadoTxt}>¡Lección completada!</Text>
+                      </View>
                     )}
                   </View>
                 )}
-
-                {isOpen && bloques.length === 0 && (
-                  <View style={s.expanded}>
-                    <Text style={s.bodyText}>Esta sección no tiene contenido todavía.</Text>
-                  </View>
-                )}
               </View>
+              </FadeInView>
             );
           })}
 
           <ChatShortcut navigation={navigation} />
-          <View style={{ height: 20 }} />
         </ScrollView>
       </SafeAreaView>
     );
@@ -149,28 +341,63 @@ export default function ParteCursoScreen({ navigation, route }: any) {
     <SafeAreaView style={s.safe} edges={['top']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation?.goBack()} style={s.backBtn}>
-          <Text style={s.backArrow}>←</Text>
+          <Ionicons name="arrow-back" size={22} color="#111" />
         </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>{titulo ?? seccion?.titulo ?? 'Lección'}</Text>
+        <Text style={s.headerTitle} numberOfLines={1}>Lección</Text>
         <View style={{ width: 32 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
-        {bloques.length === 0 ? (
-          <Text style={s.bodyText}>Esta lección no tiene contenido todavía.</Text>
-        ) : (
-          <BloquesRenderer bloques={bloques} />
-        )}
-        {seccion && user && (
+      <ScrollView
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Lesson hero */}
+        <FadeInView>
+          <View style={s.leafHero}>
+            <View style={s.leafIconWrap}>
+              <Ionicons name="bulb" size={20} color="#fff" />
+            </View>
+            <Text style={s.leafLabel}>Lección</Text>
+            <Text style={s.leafTitle} numberOfLines={3}>{titulo ?? seccion?.titulo ?? 'Lección'}</Text>
+            {seccionEstado === 'done' && (
+              <View style={s.leafDoneBadge}>
+                <Ionicons name="checkmark-circle" size={14} color="#fff" />
+                <Text style={s.leafDoneTxt}>Completada</Text>
+              </View>
+            )}
+          </View>
+        </FadeInView>
+
+        <FadeInView delay={120}>
+          {bloques.length === 0 ? (
+            <View style={s.noContent}>
+              <Ionicons name="document-outline" size={20} color="#BBB" />
+              <Text style={s.noContentTxt}>Esta lección no tiene contenido todavía</Text>
+            </View>
+          ) : (
+            <BloquesRenderer bloques={bloques} />
+          )}
+        </FadeInView>
+        <FadeInView delay={200}>
+          <QuizSection preguntas={preguntasMap[seccionId] ?? []} />
+        </FadeInView>
+        {seccion && user && seccionEstado !== 'done' && (
           <TouchableOpacity
             style={[s.completarBtn, { marginTop: 24 }]}
             onPress={() => marcarCompletado(seccion.id)}
+            activeOpacity={0.85}
           >
-            <Text style={s.completarTxt}>Marcar como completado ✓</Text>
+            <Ionicons name="checkmark-circle" size={18} color="#fff" />
+            <Text style={s.completarTxt}>Marcar como completada</Text>
           </TouchableOpacity>
         )}
+        {seccion && user && seccionEstado === 'done' && (
+          <View style={[s.completadoBadge, { marginTop: 24 }]}>
+            <Ionicons name="trophy" size={18} color="#B8860B" />
+            <Text style={s.completadoTxt}>¡Lección completada!</Text>
+          </View>
+        )}
         <ChatShortcut navigation={navigation} />
-        <View style={{ height: 20 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -180,17 +407,21 @@ export default function ParteCursoScreen({ navigation, route }: any) {
 
 function BloquesRenderer({ bloques }: { bloques: ContenidoBloque[] }) {
   return (
-    <>
+    <View>
       {bloques.map((b, i) => {
         if (b.tipo === 'texto') {
-          return <Text key={i} style={styles.bodyText}>{b.valor}</Text>;
+          return (
+            <View key={i} style={styles.textBlock}>
+              <Text style={styles.bodyText}>{b.valor}</Text>
+            </View>
+          );
         }
         if (b.tipo === 'lista' && b.items) {
           return (
-            <View key={i} style={{ marginBottom: 12 }}>
+            <View key={i} style={styles.listBlock}>
               {b.items.map((item, j) => (
                 <View key={j} style={styles.bulletRow}>
-                  <Text style={styles.bullet}>•</Text>
+                  <View style={styles.bulletDot} />
                   <Text style={styles.bulletText}>{item}</Text>
                 </View>
               ))}
@@ -200,17 +431,150 @@ function BloquesRenderer({ bloques }: { bloques: ContenidoBloque[] }) {
         if (b.tipo === 'ejercicio') {
           return (
             <View key={i} style={styles.ejercicioCard}>
-              <Text style={styles.ejercicioLabel}>Ejercicio</Text>
+              <View style={styles.ejercicioHead}>
+                <Ionicons name="flask" size={14} color="#2B4C72" />
+                <Text style={styles.ejercicioLabel}>Ejercicio</Text>
+              </View>
               <Text style={styles.ejercicioPregunta}>{b.pregunta}</Text>
               {b.respuesta && (
-                <Text style={styles.ejercicioRespuesta}>Respuesta: {b.respuesta}</Text>
+                <View style={styles.ejercicioRespBox}>
+                  <Ionicons name="bulb-outline" size={12} color="#888" />
+                  <Text style={styles.ejercicioRespuesta}>{b.respuesta}</Text>
+                </View>
               )}
             </View>
           );
         }
         return null;
       })}
-    </>
+    </View>
+  );
+}
+
+const LETRAS = ['A', 'B', 'C', 'D'];
+
+const quizStorageKey = (userId: string) => `quiz_resp:${userId}`;
+
+function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
+  const { user } = useAuth();
+  const [respuestas, setRespuestas] = useState<Record<string, number>>({});
+
+  const preguntaIds = preguntas.map(p => p.id).join(',');
+
+  useEffect(() => {
+    if (!user || preguntas.length === 0) return;
+    let alive = true;
+    AsyncStorage.getItem(quizStorageKey(user.id)).then(raw => {
+      if (!alive || !raw) return;
+      try {
+        const guardadas = JSON.parse(raw) as Record<string, number>;
+        const aplicables: Record<string, number> = {};
+        preguntas.forEach(p => {
+          if (guardadas[p.id] !== undefined) aplicables[p.id] = guardadas[p.id];
+        });
+        if (Object.keys(aplicables).length > 0) setRespuestas(aplicables);
+      } catch {}
+    });
+    return () => { alive = false; };
+  }, [user, preguntaIds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (preguntas.length === 0) return null;
+
+  const seleccionar = async (preguntaId: string, opcion: number) => {
+    if (respuestas[preguntaId] !== undefined) return;
+    expandPreset();
+    setRespuestas(prev => ({ ...prev, [preguntaId]: opcion }));
+    if (user) {
+      try {
+        const key = quizStorageKey(user.id);
+        const raw = await AsyncStorage.getItem(key);
+        const all = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+        all[preguntaId] = opcion;
+        await AsyncStorage.setItem(key, JSON.stringify(all));
+      } catch {}
+    }
+  };
+
+  const respondidas = Object.keys(respuestas).length;
+  const correctas = preguntas.filter(p => respuestas[p.id] === p.respuesta_correcta).length;
+
+  return (
+    <View style={quiz.container}>
+      <View style={quiz.header}>
+        <Ionicons name="help-circle" size={18} color="#2B4C72" />
+        <Text style={quiz.title}>Preguntas · {preguntas.length}</Text>
+        {respondidas > 0 && (
+          <View style={quiz.scorePill}>
+            <Text style={quiz.scoreTxt}>{correctas}/{respondidas}</Text>
+          </View>
+        )}
+      </View>
+
+      {preguntas.map((p, idx) => {
+        const seleccionada = respuestas[p.id];
+        const respondida = seleccionada !== undefined;
+        return (
+          <FadeInView key={p.id} delay={80 * idx}>
+          <View style={quiz.card}>
+            <View style={quiz.cardHead}>
+              <View style={quiz.numBadge}><Text style={quiz.numTxt}>{idx + 1}</Text></View>
+              <View style={quiz.tipoPill}>
+                <Text style={quiz.tipoTxt}>
+                  {p.tipo === 'opcion_multiple' ? 'Opción múltiple' : 'Completar frase'}
+                </Text>
+              </View>
+            </View>
+            <Text style={quiz.enunciado}>{p.enunciado}</Text>
+            {p.opciones.map((op, i) => {
+              const isSelected = seleccionada === i;
+              const isCorrect = i === p.respuesta_correcta;
+              const showCorrect = respondida && isCorrect;
+              const showWrong   = respondida && isSelected && !isCorrect;
+              return (
+                <TouchableOpacity
+                  key={i}
+                  disabled={respondida}
+                  activeOpacity={0.75}
+                  style={[
+                    quiz.opcion,
+                    showCorrect && quiz.opcionCorrecta,
+                    showWrong && quiz.opcionIncorrecta,
+                  ]}
+                  onPress={() => seleccionar(p.id, i)}
+                >
+                  <View style={[
+                    quiz.letra,
+                    showCorrect && { backgroundColor: '#2E7D52' },
+                    showWrong && { backgroundColor: '#E05A4E' },
+                  ]}>
+                    <Text style={[
+                      quiz.letraTxt,
+                      (showCorrect || showWrong) && { color: '#fff' },
+                    ]}>{LETRAS[i]}</Text>
+                  </View>
+                  <Text style={[
+                    quiz.opcionTxt,
+                    showCorrect && { color: '#2E7D52', fontWeight: '700' },
+                    showWrong && { color: '#E05A4E' },
+                  ]} numberOfLines={3}>{op}</Text>
+                  {showCorrect && <Ionicons name="checkmark-circle" size={18} color="#2E7D52" />}
+                  {showWrong && <Ionicons name="close-circle" size={18} color="#E05A4E" />}
+                </TouchableOpacity>
+              );
+            })}
+            {respondida && seleccionada !== p.respuesta_correcta && (
+              <View style={quiz.feedback}>
+                <Ionicons name="information-circle" size={14} color="#2B4C72" />
+                <Text style={quiz.feedbackTxt}>
+                  Respuesta correcta: {LETRAS[p.respuesta_correcta]}
+                </Text>
+              </View>
+            )}
+          </View>
+          </FadeInView>
+        );
+      })}
+    </View>
   );
 }
 
@@ -221,87 +585,257 @@ function ChatShortcut({ navigation }: { navigation: any }) {
       activeOpacity={0.8}
       onPress={() => navigation.navigate('ChatTab')}
     >
-      <View style={styles.chatIcon}></View>
+      <View style={styles.chatIcon}>
+        <Ionicons name="sparkles" size={18} color="#2B4C72" />
+      </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.chatTitle}>¿Tienes dudas?</Text>
         <Text style={styles.chatSub}>Pregunta al asistente IA</Text>
       </View>
-      <Text style={styles.chevron}>›</Text>
+      <Ionicons name="chevron-forward" size={20} color="#888" />
     </TouchableOpacity>
   );
 }
 
+const NAVY     = '#2B4C72';
+const NAVY_DK  = '#1E2D3D';
+const GREEN_LT = '#3FA776';
+const GOLD     = '#B8860B';
+const BG       = '#F2F4F6';
+
 const s = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: '#F2F4F6' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F4F6' },
+  safe:   { flex: 1, backgroundColor: BG },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: BG },
 
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#F2F4F6',
+    paddingHorizontal: 16, paddingTop: 24, paddingBottom: 14, backgroundColor: BG,
   },
   backBtn:     { width: 32 },
-  backArrow:   { fontSize: 22, color: '#111' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: '#111' },
 
   content: { paddingHorizontal: 16, paddingTop: 4 },
 
-  card:       { backgroundColor: '#fff', borderRadius: 12, marginBottom: 8, overflow: 'hidden' },
-  cardActive: { backgroundColor: ACTIVE_BG },
-  cardLocked: { opacity: 0.55 },
-
-  cardTop: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 18,
+  // ── Progress overview (Case A) ─────────────────────────────
+  progCard: {
+    backgroundColor: NAVY, borderRadius: 16, padding: 16, marginBottom: 16,
+    shadowColor: NAVY, shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-
-  cardNum:       { fontSize: 12, color: '#AAA', width: 50 },
-  cardNumActive: { color: '#8899AA' },
-
-  dot:       { width: 12, height: 12, borderRadius: 6 },
-  dotDone:   { backgroundColor: '#C9A09A' },
-  dotActive: { backgroundColor: '#E07070' },
-  dotLocked: { backgroundColor: '#DDB8B5' },
-
-  cardName:       { flex: 1, fontSize: 14, fontWeight: '500', color: '#222' },
-  cardNameActive: { color: '#fff', fontWeight: '600' },
-  cardNameLocked: { color: '#BBB' },
-
-  playBtn: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: '#2B4C72',
+  progTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  progIconWrap: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: 'rgba(255,214,106,0.20)',
     alignItems: 'center', justifyContent: 'center',
   },
-  chevron:       { fontSize: 20, color: '#888' },
-  chevronLocked: { fontSize: 20, color: '#CCC' },
+  progLabel: { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 },
+  progValue: { fontSize: 18, color: '#fff', fontWeight: '800' },
+  progValueDim: { color: 'rgba(255,255,255,0.55)', fontWeight: '600', fontSize: 13 },
+  progPct: { fontSize: 18, color: '#FFD66A', fontWeight: '800' },
+  subLabel: {
+    fontSize: 11, color: '#888', fontWeight: '800',
+    letterSpacing: 1.2, textTransform: 'uppercase',
+    marginBottom: 10, marginLeft: 4,
+  },
+
+  // ── Leaf hero (Case B) ────────────────────────────────────
+  leafHero: {
+    backgroundColor: NAVY, borderRadius: 18, padding: 20, marginBottom: 18,
+    shadowColor: NAVY, shadowOpacity: 0.18, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  leafIconWrap: {
+    width: 48, height: 48, borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+  },
+  leafLabel: { fontSize: 11, color: 'rgba(255,255,255,0.65)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 6 },
+  leafTitle: { fontSize: 22, fontWeight: '800', color: '#fff', lineHeight: 28 },
+  leafDoneBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    backgroundColor: 'rgba(63,167,118,0.25)',
+    borderRadius: 100, paddingHorizontal: 10, paddingVertical: 4,
+  },
+  leafDoneTxt: { fontSize: 11, color: '#fff', fontWeight: '700' },
+
+  // ── Lesson cards (Case A) ─────────────────────────────────
+  lecCard: {
+    backgroundColor: '#fff', borderRadius: 16, marginBottom: 10, overflow: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  lecCardActive: {
+    backgroundColor: NAVY_DK,
+    shadowColor: NAVY_DK, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  lecCardLocked: { opacity: 0.65 },
+
+  lecHead: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 14, paddingVertical: 14,
+  },
+  lecNum: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#F0F1F3',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  lecNumDone:   { backgroundColor: GREEN_LT },
+  lecNumActive: { backgroundColor: '#FFD66A' },
+  lecNumLocked: { backgroundColor: '#F0F1F3' },
+  lecNumTxt:    { fontSize: 14, fontWeight: '800', color: '#666' },
+
+  lecLabel:       { fontSize: 10, fontWeight: '800', color: '#999', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 },
+  lecLabelActive: { color: '#8899AA' },
+  lecName:        { fontSize: 14, fontWeight: '700', color: '#222', marginBottom: 6 },
+  lecNameActive:  { color: '#fff' },
+  lecNameLocked:  { color: '#999' },
+  lecStatus:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  lecStatusTxt:   { fontSize: 11, fontWeight: '700' },
+  lecDot: {
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: '#FFD66A',
+  },
+
+  playBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#FFD66A',
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginBottom: 14 },
 
   expanded:  { paddingHorizontal: 16, paddingBottom: 16, paddingTop: 4 },
-  bodyText:  { fontSize: 13, color: '#555', lineHeight: 21, marginBottom: 12 },
-  bulletRow: { flexDirection: 'row', gap: 8, marginBottom: 6 },
-  bullet:    { color: '#555', fontSize: 13 },
-  bulletText:{ flex: 1, fontSize: 13, color: '#555', lineHeight: 19 },
+
+  // ── Content blocks ─────────────────────────────────────────
+  textBlock: { marginBottom: 14 },
+  bodyText:  { fontSize: 14, color: '#444', lineHeight: 22 },
+
+  listBlock: {
+    backgroundColor: '#FAFBFC', borderRadius: 12,
+    padding: 14, marginBottom: 14,
+  },
+  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 },
+  bulletDot: {
+    width: 6, height: 6, borderRadius: 3,
+    backgroundColor: NAVY,
+    marginTop: 7,
+  },
+  bulletText:{ flex: 1, fontSize: 13, color: '#444', lineHeight: 20 },
 
   ejercicioCard: {
-    backgroundColor: '#F0F4FF', borderRadius: 10,
-    padding: 14, marginBottom: 12,
+    backgroundColor: '#F0F4FF', borderRadius: 12,
+    padding: 14, marginBottom: 14,
+    borderLeftWidth: 3, borderLeftColor: NAVY,
   },
-  ejercicioLabel:    { fontSize: 10, fontWeight: '700', color: '#2B4C72', textTransform: 'uppercase', marginBottom: 6 },
-  ejercicioPregunta: { fontSize: 14, fontWeight: '600', color: '#111', marginBottom: 8 },
-  ejercicioRespuesta:{ fontSize: 13, color: '#555', fontStyle: 'italic' },
+  ejercicioHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  ejercicioLabel:    { fontSize: 10, fontWeight: '800', color: NAVY, textTransform: 'uppercase', letterSpacing: 0.8 },
+  ejercicioPregunta: { fontSize: 14, fontWeight: '700', color: '#111', marginBottom: 10, lineHeight: 20 },
+  ejercicioRespBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(43,76,114,0.06)', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  ejercicioRespuesta:{ fontSize: 12, color: '#666', fontStyle: 'italic' },
+
+  noContent: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 16, paddingHorizontal: 12,
+    backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: 10,
+    marginBottom: 8,
+  },
+  noContentTxt: { fontSize: 13, color: '#999', fontStyle: 'italic' },
 
   completarBtn: {
-    backgroundColor: '#2B4C72', borderRadius: 10,
-    paddingVertical: 12, alignItems: 'center', marginTop: 8,
+    backgroundColor: GREEN_LT, borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row', gap: 8, marginTop: 14,
+    shadowColor: GREEN_LT, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-  completarTxt: { fontSize: 13, fontWeight: '700', color: '#fff' },
+  completarTxt: { fontSize: 14, fontWeight: '800', color: '#fff' },
+
+  completadoBadge: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 14, borderRadius: 12,
+    backgroundColor: '#FFF6E0', marginTop: 14,
+    borderWidth: 1, borderColor: '#FFD66A',
+  },
+  completadoTxt: { fontSize: 14, fontWeight: '800', color: GOLD },
 
   chatShortcut: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginTop: 8,
+    backgroundColor: '#fff', borderRadius: 14, padding: 14, marginTop: 16,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
-  chatIcon:  { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center' },
-  chatTitle: { fontSize: 13, fontWeight: '700', color: '#111', marginBottom: 2 },
-  chatSub:   { fontSize: 12, color: '#999' },
+  chatIcon: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: 'rgba(43,76,114,0.10)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  chatTitle: { fontSize: 13, fontWeight: '800', color: '#111', marginBottom: 2 },
+  chatSub:   { fontSize: 12, color: '#888' },
+  chevron:   { fontSize: 20, color: '#888' },
 });
 
 // Shared styles used by sub-components
 const styles = s;
+
+const quiz = StyleSheet.create({
+  container: { marginTop: 16 },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12,
+  },
+  title: { flex: 1, fontSize: 13, fontWeight: '800', color: '#111', textTransform: 'uppercase', letterSpacing: 0.4 },
+  scorePill: {
+    backgroundColor: '#2B4C72', borderRadius: 100,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  scoreTxt: { color: '#fff', fontSize: 11, fontWeight: '800' },
+
+  card: {
+    backgroundColor: '#fff', borderRadius: 12,
+    padding: 14, marginBottom: 10,
+  },
+  cardHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  numBadge: {
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: '#2B4C72',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  numTxt: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  tipoPill: {
+    backgroundColor: 'rgba(43,76,114,0.08)', borderRadius: 100,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  tipoTxt: { fontSize: 10, fontWeight: '700', color: '#2B4C72' },
+
+  enunciado: { fontSize: 14, color: '#222', lineHeight: 20, marginBottom: 12 },
+
+  opcion: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, paddingHorizontal: 12,
+    backgroundColor: '#F7F8FA', borderRadius: 10,
+    marginBottom: 8, borderWidth: 1.5, borderColor: 'transparent',
+  },
+  opcionCorrecta:   { backgroundColor: '#E9F5EE', borderColor: '#2E7D52' },
+  opcionIncorrecta: { backgroundColor: '#FCEBEA', borderColor: '#E05A4E' },
+
+  letra: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#E0E0E0',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  letraTxt: { fontSize: 12, fontWeight: '800', color: '#666' },
+  opcionTxt: { flex: 1, fontSize: 13, color: '#333' },
+
+  feedback: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(43,76,114,0.07)', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 6, marginTop: 4,
+  },
+  feedbackTxt: { fontSize: 11, color: '#2B4C72', fontWeight: '700' },
+});

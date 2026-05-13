@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import HomeScreen             from '../screens/HomeScreen';
 import ChatScreen             from '../screens/ChatScreen';
@@ -17,6 +18,8 @@ import RegisterScreen         from '../screens/RegisterScreen';
 import ForgotPasswordScreen   from '../screens/ForgotPasswordScreen';
 import CrearCursoScreen       from '../screens/CrearCursoScreen';
 import EditorSeccionesScreen  from '../screens/EditorSeccionesScreen';
+import EditorPreguntasScreen  from '../screens/EditorPreguntasScreen';
+import EditorContenidoScreen  from '../screens/EditorContenidoScreen';
 
 import { useAuth } from '../context/AuthContext';
 import { Colors } from '../theme';
@@ -44,22 +47,24 @@ function AuthStack() {
 
 function HomeStack() {
   return (
-    <Stack.Navigator screenOptions={screenOpts}>
-      <Stack.Screen name="HomeMain" component={HomeScreen}      options={{ headerShown: false }} />
-      <Stack.Screen name="Curso"    component={CursoScreen}     options={({ route }: any) => ({ title: route.params?.titulo ?? 'Curso' })} />
-      <Stack.Screen name="Parte"    component={ParteCursoScreen} options={({ route }: any) => ({ title: route.params?.titulo ?? 'Parte' })} />
+    <Stack.Navigator screenOptions={{ ...screenOpts, headerShown: false }}>
+      <Stack.Screen name="HomeMain" component={HomeScreen} />
+      <Stack.Screen name="Curso"    component={CursoScreen} />
+      <Stack.Screen name="Parte"    component={ParteCursoScreen} />
     </Stack.Navigator>
   );
 }
 
 function LessonsStack() {
   return (
-    <Stack.Navigator screenOptions={screenOpts}>
-      <Stack.Screen name="CursosList"      component={CursosListScreen}      options={{ headerShown: false }} />
-      <Stack.Screen name="Curso"           component={CursoScreen}           options={({ route }: any) => ({ title: route.params?.titulo ?? 'Curso' })} />
-      <Stack.Screen name="Parte"           component={ParteCursoScreen}      options={({ route }: any) => ({ title: route.params?.titulo ?? 'Parte' })} />
-      <Stack.Screen name="CrearCurso"      component={CrearCursoScreen}      options={{ title: 'Nuevo curso', headerShown: true }} />
-      <Stack.Screen name="EditorSecciones" component={EditorSeccionesScreen} options={{ title: 'Editor', headerShown: false }} />
+    <Stack.Navigator screenOptions={{ ...screenOpts, headerShown: false }}>
+      <Stack.Screen name="CursosList"      component={CursosListScreen} />
+      <Stack.Screen name="Curso"           component={CursoScreen} />
+      <Stack.Screen name="Parte"           component={ParteCursoScreen} />
+      <Stack.Screen name="CrearCurso"      component={CrearCursoScreen} />
+      <Stack.Screen name="EditorSecciones" component={EditorSeccionesScreen} />
+      <Stack.Screen name="EditorPreguntas" component={EditorPreguntasScreen} />
+      <Stack.Screen name="EditorContenido" component={EditorContenidoScreen} />
     </Stack.Navigator>
   );
 }
@@ -74,6 +79,9 @@ function ChatStack() {
 }
 
 function AppTabs() {
+  const insets = useSafeAreaInsets();
+  const baseHeight = Platform.OS === 'ios' ? 64 : 58;
+  const basePaddingBottom = Platform.OS === 'ios' ? 4 : 8;
   return (
     <Tab.Navigator
       screenOptions={{
@@ -85,8 +93,8 @@ function AppTabs() {
           backgroundColor: Colors.surface,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 82 : 70,
-          paddingBottom: Platform.OS === 'ios' ? 18 : 12,
+          height: baseHeight + insets.bottom,
+          paddingBottom: basePaddingBottom + insets.bottom,
           paddingTop: 6,
         },
         tabBarShowLabel: true,
@@ -119,6 +127,14 @@ function AppTabs() {
           tabBarIcon: ({ focused, color }) =>
             <Ionicons name={focused ? 'book' : 'book-outline'} size={22} color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            if (navigation.isFocused()) {
+              e.preventDefault();
+              navigation.navigate('LessonsTab', { screen: 'CursosList' });
+            }
+          },
+        })}
       />
       <Tab.Screen
         name="ChatTab"

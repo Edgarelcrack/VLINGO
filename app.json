@@ -12,10 +12,28 @@
       "adaptiveIcon": {
         "backgroundColor": "#0e0e0e"
       },
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.anonymous.vlingoapp"
     },
     "ios": {
-      "supportsTablet": false
-    }
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow VLINGO to use speech recognition for pronunciation exercises.",
+        "NSMicrophoneUsageDescription": "Allow VLINGO to use the microphone for pronunciation exercises."
+      }
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow VLINGO to use the microphone for pronunciation exercises.",
+          "speechRecognitionPermission": "Allow VLINGO to use speech recognition for pronunciation exercises."
+        }
+      ]
+    ]
   }
 }

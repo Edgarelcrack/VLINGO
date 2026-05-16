@@ -127,6 +127,70 @@ export const contarPreguntasPorSecciones = async (
   return map;
 };
 
+export type EstadisticasUsuario = {
+  leccionesCompletadas: number;
+  cursoActivo: {
+    cursoId: string;
+    cursoTitulo: string;
+    totalRaices: number;
+    raicesCompletadas: number;
+  } | null;
+};
+
+export const getEstadisticasUsuario = async (
+  userId: string
+): Promise<EstadisticasUsuario> => {
+  const { data: progreso } = await supabase
+    .from('progreso_usuario')
+    .select('seccion_id, estado')
+    .eq('usuario_id', userId);
+
+  const progresos = (progreso as { seccion_id: string; estado: EstadoSeccion }[] | null) ?? [];
+  if (progresos.length === 0) {
+    return { leccionesCompletadas: 0, cursoActivo: null };
+  }
+
+  const seccionIds = progresos.map(p => p.seccion_id);
+  const { data: secciones } = await supabase
+    .from('seccion')
+    .select('id, tipo, curso_id, parent_id')
+    .in('id', seccionIds);
+
+  const lst = (secciones as { id: string; tipo: string; curso_id: string; parent_id: string | null }[] | null) ?? [];
+  const tipoMap: Record<string, string> = {};
+  const cursoMap: Record<string, string> = {};
+  lst.forEach(s => { tipoMap[s.id] = s.tipo; cursoMap[s.id] = s.curso_id; });
+
+  const leccionesCompletadas = progresos.filter(p =>
+    p.estado === 'done' && tipoMap[p.seccion_id] === 'leccion'
+  ).length;
+
+  const activeProg = progresos.find(p => p.estado === 'active');
+  let cursoActivo: EstadisticasUsuario['cursoActivo'] = null;
+  if (activeProg) {
+    const cursoId = cursoMap[activeProg.seccion_id];
+    if (cursoId) {
+      const [{ data: curso }, { data: raices }] = await Promise.all([
+        supabase.from('curso').select('titulo').eq('id', cursoId).maybeSingle(),
+        supabase.from('seccion').select('id').eq('curso_id', cursoId).is('parent_id', null),
+      ]);
+      const raicesLst = (raices as { id: string }[] | null) ?? [];
+      const raicesIds = new Set(raicesLst.map(r => r.id));
+      const raicesCompletadas = progresos.filter(
+        p => p.estado === 'done' && raicesIds.has(p.seccion_id)
+      ).length;
+      cursoActivo = {
+        cursoId,
+        cursoTitulo: (curso as { titulo?: string } | null)?.titulo ?? 'Curso',
+        totalRaices: raicesLst.length,
+        raicesCompletadas,
+      };
+    }
+  }
+
+  return { leccionesCompletadas, cursoActivo };
+};
+
 export const moverSeccion = async (
   id: string,
   direccion: 'arriba' | 'abajo'

@@ -4,6 +4,10 @@ import {
   StyleSheet, ActivityIndicator, ToastAndroid, Platform, Alert,
   LayoutAnimation,
 } from 'react-native';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -454,27 +458,193 @@ function BloquesRenderer({ bloques }: { bloques: ContenidoBloque[] }) {
 const LETRAS = ['A', 'B', 'C', 'D'];
 
 const quizStorageKey = (userId: string) => `quiz_resp:${userId}`;
+const pronStorageKey = (userId: string) => `quiz_pron:${userId}`;
+
+type PronResultado = { transcripcion: string; resultado: 'correct' | 'partial' | 'wrong' };
+
+function normalizeText(s: string): string {
+  return s.toLowerCase().replace(/[.,!?;:'"¡¿\-]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function compareTexts(transcribed: string, expected: string): 'correct' | 'partial' | 'wrong' {
+  const t = normalizeText(transcribed);
+  const e = normalizeText(expected);
+  if (t === e) return 'correct';
+  const tWords = t.split(' ');
+  const eWords = e.split(' ');
+  const common = tWords.filter(w => eWords.includes(w)).length;
+  const ratio = common / Math.max(tWords.length, eWords.length, 1);
+  return ratio >= 0.65 ? 'partial' : 'wrong';
+}
+
+function PronunciacionCard({
+  pregunta,
+  saved,
+  onResult,
+}: {
+  pregunta: Pregunta;
+  saved: PronResultado | undefined;
+  onResult: (data: PronResultado) => void;
+}) {
+  const [isListening, setIsListening]   = useState(false);
+  const [transcripcion, setTranscripcion] = useState(saved?.transcripcion ?? '');
+  const [resultado, setResultado]       = useState<PronResultado['resultado'] | null>(saved?.resultado ?? null);
+
+  const transcRef  = useRef(saved?.transcripcion ?? '');
+  const listeningRef = useRef(false);
+  const doneRef    = useRef(saved?.resultado != null);
+
+  const esperado = pregunta.opciones[0] ?? '';
+
+  useSpeechRecognitionEvent('result', (event: any) => {
+    if (!listeningRef.current) return;
+    const text: string = event.results?.[0]?.transcript ?? '';
+    if (text) {
+      transcRef.current = text;
+      setTranscripcion(text);
+    }
+  });
+
+  useSpeechRecognitionEvent('end', () => {
+    if (!listeningRef.current) return;
+    listeningRef.current = false;
+    setIsListening(false);
+    const texto = transcRef.current;
+    if (texto && !doneRef.current) {
+      doneRef.current = true;
+      const res = compareTexts(texto, esperado);
+      expandPreset();
+      setResultado(res);
+      onResult({ transcripcion: texto, resultado: res });
+    }
+  });
+
+  useSpeechRecognitionEvent('error', () => {
+    if (!listeningRef.current) return;
+    listeningRef.current = false;
+    setIsListening(false);
+  });
+
+  const handleMic = async () => {
+    if (resultado !== null) return;
+    if (isListening) {
+      ExpoSpeechRecognitionModule.stop();
+      return;
+    }
+    const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Micrófono necesario',
+        'Esta actividad requiere acceso al micrófono. Actívalo en Ajustes del dispositivo.',
+      );
+      return;
+    }
+    transcRef.current = '';
+    setTranscripcion('');
+    listeningRef.current = true;
+    setIsListening(true);
+    ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: false });
+  };
+
+  const isAnswered = resultado !== null;
+  const resultColor =
+    resultado === 'correct' ? '#2E7D52' :
+    resultado === 'partial'  ? '#B8860B' :
+    '#E05A4E';
+  const resultIcon =
+    resultado === 'correct' ? 'checkmark-circle' :
+    resultado === 'partial'  ? 'alert-circle' :
+    'close-circle' as any;
+  const resultMsg =
+    resultado === 'correct' ? '¡Perfecto!' :
+    resultado === 'partial'  ? 'Casi, sigue practicando' :
+    'Inténtalo de nuevo';
+
+  return (
+    <View style={pron.card}>
+      <View style={pron.head}>
+        <View style={pron.iconWrap}>
+          <Ionicons name="mic" size={15} color="#2B4C72" />
+        </View>
+        <Text style={pron.tipo}>Pronunciación</Text>
+      </View>
+
+      <View style={pron.phraseBox}>
+        <Text style={pron.phraseLabel}>Di en voz alta:</Text>
+        <Text style={pron.phrase}>{pregunta.enunciado}</Text>
+      </View>
+
+      {!isAnswered && (
+        <TouchableOpacity
+          style={[pron.micBtn, isListening && pron.micBtnActive]}
+          onPress={handleMic}
+          activeOpacity={0.8}
+        >
+          <Ionicons name={isListening ? 'stop-circle' : 'mic'} size={26} color="#fff" />
+          <Text style={pron.micTxt}>{isListening ? 'Detener' : 'Grabar pronunciación'}</Text>
+        </TouchableOpacity>
+      )}
+
+      {isListening && transcripcion ? (
+        <View style={pron.liveBox}>
+          <Ionicons name="radio-outline" size={12} color="#E05A4E" />
+          <Text style={pron.liveTxt} numberOfLines={2}>{transcripcion}</Text>
+        </View>
+      ) : null}
+
+      {isAnswered && (
+        <View style={[pron.resultBox, { borderColor: resultColor + '40', backgroundColor: resultColor + '14' }]}>
+          <Ionicons name={resultIcon} size={20} color={resultColor} />
+          <View style={{ flex: 1 }}>
+            <Text style={[pron.resultTxt, { color: resultColor }]}>{resultMsg}</Text>
+            {transcripcion ? (
+              <Text style={pron.transcTxt} numberOfLines={2}>Dijiste: "{transcripcion}"</Text>
+            ) : null}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
 
 function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
   const { user } = useAuth();
-  const [respuestas, setRespuestas] = useState<Record<string, number>>({});
+  const [respuestas, setRespuestas]     = useState<Record<string, number>>({});
+  const [pronResultados, setPronResultados] = useState<Record<string, PronResultado>>({});
 
   const preguntaIds = preguntas.map(p => p.id).join(',');
 
   useEffect(() => {
     if (!user || preguntas.length === 0) return;
     let alive = true;
-    AsyncStorage.getItem(quizStorageKey(user.id)).then(raw => {
-      if (!alive || !raw) return;
-      try {
-        const guardadas = JSON.parse(raw) as Record<string, number>;
-        const aplicables: Record<string, number> = {};
-        preguntas.forEach(p => {
-          if (guardadas[p.id] !== undefined) aplicables[p.id] = guardadas[p.id];
-        });
-        if (Object.keys(aplicables).length > 0) setRespuestas(aplicables);
-      } catch {}
-    });
+
+    const mcPregs   = preguntas.filter(p => p.tipo !== 'pronunciacion');
+    const pronPregs = preguntas.filter(p => p.tipo === 'pronunciacion');
+
+    if (mcPregs.length > 0) {
+      AsyncStorage.getItem(quizStorageKey(user.id)).then(raw => {
+        if (!alive || !raw) return;
+        try {
+          const guardadas = JSON.parse(raw) as Record<string, number>;
+          const aplicables: Record<string, number> = {};
+          mcPregs.forEach(p => { if (guardadas[p.id] !== undefined) aplicables[p.id] = guardadas[p.id]; });
+          if (Object.keys(aplicables).length > 0) setRespuestas(aplicables);
+        } catch {}
+      });
+    }
+
+    if (pronPregs.length > 0) {
+      AsyncStorage.getItem(pronStorageKey(user.id)).then(raw => {
+        if (!alive || !raw) return;
+        try {
+          const guardadas = JSON.parse(raw) as Record<string, PronResultado>;
+          const aplicables: Record<string, PronResultado> = {};
+          pronPregs.forEach(p => { if (guardadas[p.id]) aplicables[p.id] = guardadas[p.id]; });
+          if (Object.keys(aplicables).length > 0) setPronResultados(aplicables);
+        } catch {}
+      });
+    }
+
     return () => { alive = false; };
   }, [user, preguntaIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -495,8 +665,30 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
     }
   };
 
-  const respondidas = Object.keys(respuestas).length;
-  const correctas = preguntas.filter(p => respuestas[p.id] === p.respuesta_correcta).length;
+  const guardarPronResultado = async (pregId: string, data: PronResultado) => {
+    setPronResultados(prev => ({ ...prev, [pregId]: data }));
+    if (user) {
+      try {
+        const key = pronStorageKey(user.id);
+        const raw = await AsyncStorage.getItem(key);
+        const all = raw ? (JSON.parse(raw) as Record<string, PronResultado>) : {};
+        all[pregId] = data;
+        await AsyncStorage.setItem(key, JSON.stringify(all));
+      } catch {}
+    }
+  };
+
+  const respondidas = preguntas.filter(p =>
+    p.tipo === 'pronunciacion'
+      ? pronResultados[p.id] !== undefined
+      : respuestas[p.id] !== undefined
+  ).length;
+
+  const correctas = preguntas.filter(p =>
+    p.tipo === 'pronunciacion'
+      ? pronResultados[p.id]?.resultado === 'correct'
+      : respuestas[p.id] === p.respuesta_correcta
+  ).length;
 
   return (
     <View style={quiz.container}>
@@ -511,6 +703,18 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
       </View>
 
       {preguntas.map((p, idx) => {
+        if (p.tipo === 'pronunciacion') {
+          return (
+            <FadeInView key={p.id} delay={80 * idx}>
+              <PronunciacionCard
+                pregunta={p}
+                saved={pronResultados[p.id]}
+                onResult={(data) => guardarPronResultado(p.id, data)}
+              />
+            </FadeInView>
+          );
+        }
+
         const seleccionada = respuestas[p.id];
         const respondida = seleccionada !== undefined;
         return (
@@ -838,4 +1042,52 @@ const quiz = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6, marginTop: 4,
   },
   feedbackTxt: { fontSize: 11, color: '#2B4C72', fontWeight: '700' },
+});
+
+const pron = StyleSheet.create({
+  card: {
+    backgroundColor: '#fff', borderRadius: 14,
+    padding: 14, marginBottom: 10,
+    borderWidth: 1.5, borderColor: 'rgba(43,76,114,0.12)',
+  },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  iconWrap: {
+    width: 28, height: 28, borderRadius: 8,
+    backgroundColor: 'rgba(43,76,114,0.10)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tipo: { fontSize: 11, fontWeight: '800', color: '#2B4C72', textTransform: 'uppercase', letterSpacing: 0.8 },
+
+  phraseBox: {
+    backgroundColor: '#F4F6F9', borderRadius: 10,
+    padding: 14, marginBottom: 14,
+    borderLeftWidth: 3, borderLeftColor: '#2B4C72',
+  },
+  phraseLabel: { fontSize: 10, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+  phrase: { fontSize: 17, fontWeight: '800', color: '#111', lineHeight: 24 },
+
+  micBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#2B4C72', borderRadius: 12,
+    paddingVertical: 13, marginBottom: 10,
+    shadowColor: '#2B4C72', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  micBtnActive: { backgroundColor: '#E05A4E' },
+  micTxt: { fontSize: 14, fontWeight: '800', color: '#fff' },
+
+  liveBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(224,90,78,0.07)', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 8, marginBottom: 6,
+  },
+  liveTxt: { flex: 1, fontSize: 13, color: '#555', fontStyle: 'italic' },
+
+  resultBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderRadius: 10, borderWidth: 1.5,
+    paddingHorizontal: 12, paddingVertical: 10, marginTop: 4,
+  },
+  resultTxt: { fontSize: 13, fontWeight: '800', marginBottom: 3 },
+  transcTxt: { fontSize: 11, color: '#888', fontStyle: 'italic' },
 });

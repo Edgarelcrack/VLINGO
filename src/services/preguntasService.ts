@@ -29,17 +29,23 @@ export const crearPregunta = async (params: {
   opciones: string[];
   respuesta_correcta: number;
 }): Promise<{ data: Pregunta | null; error: string | null }> => {
-  if (params.opciones.length !== 4) {
-    return { data: null, error: 'Cada pregunta debe tener exactamente 4 opciones' };
-  }
-  if (params.respuesta_correcta < 0 || params.respuesta_correcta > 3) {
-    return { data: null, error: 'La opción correcta debe ser un índice válido (0-3)' };
-  }
   if (!params.enunciado.trim()) {
     return { data: null, error: 'El enunciado no puede estar vacío' };
   }
-  if (params.opciones.some(o => !o.trim())) {
-    return { data: null, error: 'Todas las opciones deben tener texto' };
+  if (params.tipo !== 'pronunciacion') {
+    if (params.opciones.length !== 4) {
+      return { data: null, error: 'Cada pregunta debe tener exactamente 4 opciones' };
+    }
+    if (params.respuesta_correcta < 0 || params.respuesta_correcta > 3) {
+      return { data: null, error: 'La opción correcta debe ser un índice válido (0-3)' };
+    }
+    if (params.opciones.some(o => !o.trim())) {
+      return { data: null, error: 'Todas las opciones deben tener texto' };
+    }
+  } else {
+    if (!params.opciones[0]?.trim()) {
+      return { data: null, error: 'La transcripción esperada no puede estar vacía' };
+    }
   }
 
   const total = await contarPreguntas(params.seccion_id);
@@ -68,20 +74,22 @@ export const actualizarPregunta = async (
   id: string,
   updates: Partial<Pick<Pregunta, 'tipo' | 'enunciado' | 'opciones' | 'respuesta_correcta'>>
 ): Promise<{ error: string | null }> => {
-  if (updates.opciones && updates.opciones.length !== 4) {
-    return { error: 'Cada pregunta debe tener exactamente 4 opciones' };
-  }
-  if (
-    updates.respuesta_correcta !== undefined &&
-    (updates.respuesta_correcta < 0 || updates.respuesta_correcta > 3)
-  ) {
-    return { error: 'La opción correcta debe ser un índice válido (0-3)' };
-  }
   if (updates.enunciado !== undefined && !updates.enunciado.trim()) {
     return { error: 'El enunciado no puede estar vacío' };
   }
-  if (updates.opciones && updates.opciones.some(o => !o.trim())) {
-    return { error: 'Todas las opciones deben tener texto' };
+  if (updates.tipo !== 'pronunciacion') {
+    if (updates.opciones && updates.opciones.length !== 4) {
+      return { error: 'Cada pregunta debe tener exactamente 4 opciones' };
+    }
+    if (
+      updates.respuesta_correcta !== undefined &&
+      (updates.respuesta_correcta < 0 || updates.respuesta_correcta > 3)
+    ) {
+      return { error: 'La opción correcta debe ser un índice válido (0-3)' };
+    }
+    if (updates.opciones && updates.opciones.some(o => !o.trim())) {
+      return { error: 'Todas las opciones deben tener texto' };
+    }
   }
 
   const payload: Record<string, unknown> = { ...updates };

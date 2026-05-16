@@ -19,6 +19,7 @@ const GREEN = '#2E7D52';
 const TIPO_LABEL: Record<TipoPregunta, string> = {
   opcion_multiple: 'Opción múltiple',
   completar_frase: 'Completar la frase',
+  pronunciacion: 'Pronunciación',
 };
 
 const LETRAS = ['A', 'B', 'C', 'D'];
@@ -143,20 +144,29 @@ export default function EditorPreguntasScreen({ navigation, route }: any) {
                 </View>
               </View>
               <Text style={s.enunciado}>{p.enunciado}</Text>
-              {p.opciones.map((op, idx) => {
-                const correcta = idx === p.respuesta_correcta;
-                return (
-                  <View key={idx} style={[s.opcionRow, correcta && s.opcionRowCorrecta]}>
-                    <View style={[s.opcionLetra, correcta && s.opcionLetraCorrecta]}>
-                      <Text style={[s.opcionLetraTxt, correcta && { color: '#fff' }]}>{LETRAS[idx]}</Text>
+              {p.tipo === 'pronunciacion' ? (
+                <View style={[s.opcionRow, { backgroundColor: '#F0F4FF' }]}>
+                  <Ionicons name="mic-outline" size={16} color={NAVY} />
+                  <Text style={[s.opcionTxt, { color: NAVY, fontWeight: '700' }]} numberOfLines={2}>
+                    Esperado: {p.opciones[0]}
+                  </Text>
+                </View>
+              ) : (
+                p.opciones.map((op, idx) => {
+                  const correcta = idx === p.respuesta_correcta;
+                  return (
+                    <View key={idx} style={[s.opcionRow, correcta && s.opcionRowCorrecta]}>
+                      <View style={[s.opcionLetra, correcta && s.opcionLetraCorrecta]}>
+                        <Text style={[s.opcionLetraTxt, correcta && { color: '#fff' }]}>{LETRAS[idx]}</Text>
+                      </View>
+                      <Text style={[s.opcionTxt, correcta && { color: GREEN, fontWeight: '700' }]} numberOfLines={2}>
+                        {op}
+                      </Text>
+                      {correcta && <Ionicons name="checkmark-circle" size={18} color={GREEN} />}
                     </View>
-                    <Text style={[s.opcionTxt, correcta && { color: GREEN, fontWeight: '700' }]} numberOfLines={2}>
-                      {op}
-                    </Text>
-                    {correcta && <Ionicons name="checkmark-circle" size={18} color={GREEN} />}
-                  </View>
-                );
-              })}
+                  );
+                })
+              )}
               <View style={s.actions}>
                 <TouchableOpacity style={s.actionBtn} onPress={() => setEditando(p)}>
                   <Ionicons name="create-outline" size={16} color={NAVY} />
@@ -221,19 +231,27 @@ function PreguntaModal({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [tipo, setTipo]               = useState<TipoPregunta>('opcion_multiple');
-  const [enunciado, setEnunciado]     = useState('');
-  const [opciones, setOpciones]       = useState<string[]>(['', '', '', '']);
-  const [correcta, setCorrecta]       = useState(0);
-  const [guardando, setGuardando]     = useState(false);
+  const [tipo, setTipo]                           = useState<TipoPregunta>('opcion_multiple');
+  const [enunciado, setEnunciado]                 = useState('');
+  const [opciones, setOpciones]                   = useState<string[]>(['', '', '', '']);
+  const [correcta, setCorrecta]                   = useState(0);
+  const [transcripcionEsperada, setTranscripcion] = useState('');
+  const [guardando, setGuardando]                 = useState(false);
 
   useEffect(() => {
     if (visible) {
-      setTipo(inicial?.tipo ?? 'opcion_multiple');
+      const t = inicial?.tipo ?? 'opcion_multiple';
+      setTipo(t);
       setEnunciado(inicial?.enunciado ?? '');
-      setOpciones(inicial?.opciones && inicial.opciones.length === 4
-        ? [...inicial.opciones]
-        : ['', '', '', '']);
+      if (t === 'pronunciacion') {
+        setTranscripcion(inicial?.opciones[0] ?? '');
+        setOpciones(['', '', '', '']);
+      } else {
+        setTranscripcion('');
+        setOpciones(inicial?.opciones && inicial.opciones.length === 4
+          ? [...inicial.opciones]
+          : ['', '', '', '']);
+      }
       setCorrecta(inicial?.respuesta_correcta ?? 0);
       setGuardando(false);
     }
@@ -243,17 +261,18 @@ function PreguntaModal({
     setOpciones(prev => prev.map((o, i) => i === idx ? valor : o));
   };
 
-  const valido = enunciado.trim().length > 0 && opciones.every(o => o.trim().length > 0);
+  const valido = tipo === 'pronunciacion'
+    ? enunciado.trim().length > 0 && transcripcionEsperada.trim().length > 0
+    : enunciado.trim().length > 0 && opciones.every(o => o.trim().length > 0);
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!valido || guardando) return;
     setGuardando(true);
-    await onSave({
-      tipo,
-      enunciado: enunciado.trim(),
-      opciones: opciones.map(o => o.trim()),
-      respuesta_correcta: correcta,
-    });
+    if (tipo === 'pronunciacion') {
+      onSave({ tipo, enunciado: enunciado.trim(), opciones: [transcripcionEsperada.trim()], respuesta_correcta: 0 });
+    } else {
+      onSave({ tipo, enunciado: enunciado.trim(), opciones: opciones.map(o => o.trim()), respuesta_correcta: correcta });
+    }
     setGuardando(false);
   };
 
@@ -268,11 +287,11 @@ function PreguntaModal({
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 460 }}
+            style={{ maxHeight: 480 }}
           >
             <Text style={m.label}>Tipo de pregunta</Text>
             <View style={m.tipoRow}>
-              {(['opcion_multiple', 'completar_frase'] as TipoPregunta[]).map(t => {
+              {(['opcion_multiple', 'completar_frase', 'pronunciacion'] as TipoPregunta[]).map(t => {
                 const active = tipo === t;
                 return (
                   <TouchableOpacity
@@ -281,6 +300,10 @@ function PreguntaModal({
                     onPress={() => setTipo(t)}
                     activeOpacity={0.85}
                   >
+                    <Ionicons
+                      name={t === 'pronunciacion' ? 'mic-outline' : t === 'completar_frase' ? 'text-outline' : 'list-outline'}
+                      size={12} color={active ? '#fff' : '#666'}
+                    />
                     <Text style={[m.tipoBtnTxt, active && { color: '#fff' }]}>
                       {TIPO_LABEL[t]}
                     </Text>
@@ -289,43 +312,69 @@ function PreguntaModal({
               })}
             </View>
 
-            <Text style={m.label}>Enunciado</Text>
+            <Text style={m.label}>
+              {tipo === 'pronunciacion' ? 'Frase a pronunciar' : 'Enunciado'}
+            </Text>
             <TextInput
               style={[m.input, m.inputMulti]}
               value={enunciado}
               onChangeText={setEnunciado}
-              placeholder={tipo === 'completar_frase'
-                ? 'Ej: Yo ___ a la escuela todos los días'
-                : 'Escribe la pregunta…'}
+              placeholder={
+                tipo === 'completar_frase' ? 'Ej: Yo ___ a la escuela todos los días' :
+                tipo === 'pronunciacion'   ? 'Ej: The weather is beautiful today' :
+                'Escribe la pregunta…'
+              }
               placeholderTextColor="#BBB"
               multiline
               textAlignVertical="top"
             />
 
-            <Text style={m.label}>Opciones (marca la correcta)</Text>
-            {opciones.map((op, idx) => {
-              const isCorrecta = idx === correcta;
-              return (
-                <View key={idx} style={m.opcionWrap}>
-                  <TouchableOpacity
-                    style={[m.radio, isCorrecta && m.radioActive]}
-                    onPress={() => setCorrecta(idx)}
-                    activeOpacity={0.7}
-                  >
-                    {isCorrecta
-                      ? <Ionicons name="checkmark" size={14} color="#fff" />
-                      : <Text style={m.radioTxt}>{LETRAS[idx]}</Text>}
-                  </TouchableOpacity>
-                  <TextInput
-                    style={[m.input, { flex: 1, marginBottom: 0 }]}
-                    value={op}
-                    onChangeText={(v) => setOpcion(idx, v)}
-                    placeholder={`Opción ${LETRAS[idx]}`}
-                    placeholderTextColor="#BBB"
-                  />
+            {tipo === 'pronunciacion' ? (
+              <>
+                <Text style={m.label}>Transcripción esperada</Text>
+                <TextInput
+                  style={m.input}
+                  value={transcripcionEsperada}
+                  onChangeText={setTranscripcion}
+                  placeholder="Ej: the weather is beautiful today"
+                  placeholderTextColor="#BBB"
+                  autoCapitalize="none"
+                />
+                <View style={m.pronHint}>
+                  <Ionicons name="information-circle-outline" size={14} color="#888" />
+                  <Text style={m.pronHintTxt}>
+                    Escribe en minúsculas sin puntuación. Se comparará con lo que diga el estudiante.
+                  </Text>
                 </View>
-              );
-            })}
+              </>
+            ) : (
+              <>
+                <Text style={m.label}>Opciones (marca la correcta)</Text>
+                {opciones.map((op, idx) => {
+                  const isCorrecta = idx === correcta;
+                  return (
+                    <View key={idx} style={m.opcionWrap}>
+                      <TouchableOpacity
+                        style={[m.radio, isCorrecta && m.radioActive]}
+                        onPress={() => setCorrecta(idx)}
+                        activeOpacity={0.7}
+                      >
+                        {isCorrecta
+                          ? <Ionicons name="checkmark" size={14} color="#fff" />
+                          : <Text style={m.radioTxt}>{LETRAS[idx]}</Text>}
+                      </TouchableOpacity>
+                      <TextInput
+                        style={[m.input, { flex: 1, marginBottom: 0 }]}
+                        value={op}
+                        onChangeText={(v) => setOpcion(idx, v)}
+                        placeholder={`Opción ${LETRAS[idx]}`}
+                        placeholderTextColor="#BBB"
+                      />
+                    </View>
+                  );
+                })}
+              </>
+            )}
           </ScrollView>
 
           <View style={m.btnRow}>
@@ -441,6 +490,7 @@ const m = StyleSheet.create({
   tipoBtn: {
     flex: 1, paddingVertical: 10, borderRadius: 10,
     backgroundColor: '#F0F2F5', alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'center', gap: 4,
     borderWidth: 1, borderColor: 'transparent',
   },
   tipoBtnActive: { backgroundColor: NAVY, borderColor: NAVY },
@@ -463,6 +513,15 @@ const m = StyleSheet.create({
   },
   radioActive: { backgroundColor: GREEN },
   radioTxt: { fontSize: 13, fontWeight: '800', color: '#666' },
+
+  pronHint: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: 'rgba(43,76,114,0.06)', borderRadius: 8,
+    padding: 10, marginBottom: 12,
+  },
+  pronHintTxt: { flex: 1, fontSize: 11, color: '#666', lineHeight: 16 },
+
+  tipoIcon: { marginBottom: 2 },
 
   btnRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
   btnCancel: {

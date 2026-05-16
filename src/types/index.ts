@@ -59,7 +59,7 @@ export type ProgresoUsuario = {
   completado_en: string | null;
 };
 
-export type TipoPregunta = 'opcion_multiple' | 'completar_frase';
+export type TipoPregunta = 'opcion_multiple' | 'completar_frase' | 'pronunciacion';
 
 export type Pregunta = {
   id: string;

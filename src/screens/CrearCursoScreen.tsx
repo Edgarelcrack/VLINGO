@@ -20,8 +20,6 @@ const NIVEL_COLOR: Record<string, string> = {
   C1: '#AB47BC', C2: '#EC407A',
 };
 
-const IDIOMAS_COMUNES = ['inglés', 'francés', 'alemán', 'italiano', 'portugués'];
-
 export default function CrearCursoScreen({ navigation, route }: any) {
   const cursoId: string | undefined = route?.params?.cursoId;
   const modoEdicion = !!cursoId;
@@ -30,8 +28,6 @@ export default function CrearCursoScreen({ navigation, route }: any) {
   const [titulo, setTitulo]   = useState('');
   const [desc, setDesc]       = useState('');
   const [nivel, setNivel]     = useState('');
-  const [idioma, setIdioma]   = useState('inglés');
-  const [idiomaCustom, setIdiomaCustom] = useState(false);
   const [loading, setLoading] = useState(false);
   const [cargando, setCargando] = useState(modoEdicion);
   const [errors, setErrors]   = useState<Record<string, string>>({});
@@ -54,8 +50,6 @@ export default function CrearCursoScreen({ navigation, route }: any) {
       setTitulo(data.titulo);
       setDesc(data.descripcion ?? '');
       setNivel(data.nivel ?? '');
-      setIdioma(data.idioma_objetivo);
-      setIdiomaCustom(!IDIOMAS_COMUNES.includes(data.idioma_objetivo));
       setCargando(false);
     })();
     return () => { alive = false; };
@@ -65,7 +59,6 @@ export default function CrearCursoScreen({ navigation, route }: any) {
     const e: Record<string, string> = {};
     if (!titulo.trim()) e.titulo = 'El título es requerido';
     else if (titulo.trim().length < 3) e.titulo = 'Mínimo 3 caracteres';
-    if (!idioma.trim()) e.idioma = 'El idioma es requerido';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -79,7 +72,6 @@ export default function CrearCursoScreen({ navigation, route }: any) {
         titulo: titulo.trim(),
         descripcion: desc.trim() || null,
         nivel: nivel || null,
-        idioma_objetivo: idioma.trim(),
       });
       setLoading(false);
       if (error) {
@@ -94,7 +86,6 @@ export default function CrearCursoScreen({ navigation, route }: any) {
       titulo: titulo.trim(),
       descripcion: desc.trim() || undefined,
       nivel: nivel || undefined,
-      idioma_objetivo: idioma.trim(),
     });
     setLoading(false);
 
@@ -180,44 +171,6 @@ export default function CrearCursoScreen({ navigation, route }: any) {
             />
           </View>
           <Text style={s.charCounter}>{desc.length}/400</Text>
-
-          <Text style={s.label}>Idioma del curso *</Text>
-          <View style={s.chipsRow}>
-            {IDIOMAS_COMUNES.map(i => {
-              const active = !idiomaCustom && idioma === i;
-              return (
-                <TouchableOpacity
-                  key={i}
-                  style={[s.chip, active && s.chipActive]}
-                  onPress={() => { setIdioma(i); setIdiomaCustom(false); clear('idioma'); }}
-                >
-                  <Text style={[s.chipTxt, active && s.chipTxtActive]}>{i}</Text>
-                </TouchableOpacity>
-              );
-            })}
-            <TouchableOpacity
-              style={[s.chip, idiomaCustom && s.chipActive]}
-              onPress={() => { setIdiomaCustom(true); setIdioma(''); }}
-            >
-              <Ionicons name="add" size={14} color={idiomaCustom ? '#fff' : '#666'} />
-              <Text style={[s.chipTxt, idiomaCustom && s.chipTxtActive]}>Otro</Text>
-            </TouchableOpacity>
-          </View>
-          {idiomaCustom && (
-            <View style={[s.inputWrap, errors.idioma && s.inputError, { marginTop: 10 }]}>
-              <Ionicons name="globe-outline" size={16} color="#999" />
-              <TextInput
-                style={s.input}
-                placeholder="Especifica el idioma"
-                placeholderTextColor="#BBB"
-                value={idioma}
-                onChangeText={t => { setIdioma(t); clear('idioma'); }}
-                autoCapitalize="none"
-                autoFocus
-              />
-            </View>
-          )}
-          {errors.idioma ? <Text style={s.errorTxt}>{errors.idioma}</Text> : null}
 
           <Text style={s.label}>Nivel</Text>
           <View style={s.nivelRow}>
@@ -306,17 +259,6 @@ const s = StyleSheet.create({
   textArea:    { height: 76, paddingTop: 0 },
   errorTxt:    { fontSize: 11, color: '#E05A4E', marginTop: 4 },
   charCounter: { fontSize: 10, color: '#AAA', textAlign: 'right', marginTop: 4 },
-
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: 100, borderWidth: 1, borderColor: '#E0E0E0',
-    backgroundColor: WHITE,
-  },
-  chipActive: { backgroundColor: NAVY, borderColor: NAVY },
-  chipTxt:    { fontSize: 12, fontWeight: '600', color: '#666' },
-  chipTxtActive: { color: '#fff' },
 
   nivelRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   nivelBtn: {

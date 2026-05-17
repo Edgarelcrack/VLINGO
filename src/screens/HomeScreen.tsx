@@ -7,19 +7,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { getCursos } from '../services/cursosService';
+import { getTotalesApp, TotalesApp } from '../services/puntuacionService';
 import { Curso } from '../types';
 
-
-const skills = [
-  { name: 'Listening', pct: 85, color: '#4CAF7D', icon: '' },
-  { name: 'Speaking',  pct: 62, color: '#8BC34A', icon: '' },
-  { name: 'Reading',   pct: 78, color: '#90A4AE', icon: '' },
-  { name: 'Writing',   pct: 45, color: '#78909C', icon: '' },
-];
+const SKILL_CONFIG = [
+  { key: 'listening', name: 'Listening', color: '#4CAF7D', icon: 'headset-outline'  as const },
+  { key: 'speaking',  name: 'Speaking',  color: '#8BC34A', icon: 'mic-outline'       as const },
+  { key: 'reading',   name: 'Reading',   color: '#90A4AE', icon: 'book-outline'      as const },
+  { key: 'writing',   name: 'Writing',   color: '#78909C', icon: 'create-outline'    as const },
+] as const;
 
 export default function HomeScreen({ navigation }: any) {
   const { userProfile, user } = useAuth();
   const [cursos, setCursos]         = useState<Curso[]>([]);
+  const [totales, setTotales]       = useState<TotalesApp | null>(null);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -31,8 +32,9 @@ export default function HomeScreen({ navigation }: any) {
   const load = useCallback(async () => {
     if (!user) return;
     const tipo = userProfile?.tipo ?? 'estudiante';
-    const { data } = await getCursos(tipo, user.id);
-    setCursos(data.slice(0, 4)); // show max 4 recent in home
+    const [{ data }, t] = await Promise.all([getCursos(tipo, user.id), getTotalesApp()]);
+    setCursos(data.slice(0, 4));
+    setTotales(t);
   }, [user, userProfile]);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export default function HomeScreen({ navigation }: any) {
               <Text style={s.dateIcon}>☁️</Text>
               <Text style={s.date}>{today}</Text>
             </View>
-            <Text style={s.greet}>{`Buenos días,\n${firstName}`}</Text>
+            <Text style={s.greet}>{`Buen día,\n${firstName}`}</Text>
           </View>
           <View style={s.avatarWrap}>
             <Text style={s.avatarTxt}>{firstName.charAt(0).toUpperCase()}</Text>
@@ -91,20 +93,25 @@ export default function HomeScreen({ navigation }: any) {
             )}
           </View>
           <View style={s.divider} />
-          {skills.map(sk => (
-            <View key={sk.name} style={s.skillRow}>
-              <View style={s.skillLabelRow}>
-                <View style={s.skillLeft}>
-                  <Text style={s.skillIcon}>{sk.icon}</Text>
-                  <Text style={s.skillName}>{sk.name}</Text>
+          {!isProfesor && SKILL_CONFIG.map(sk => {
+            const userPts = (userProfile as any)?.[`puntos_${sk.key}`] ?? 0;
+            const total   = totales?.[sk.key] ?? 0;
+            const pct     = total > 0 ? Math.min(100, Math.round((userPts / total) * 100)) : 0;
+            return (
+              <View key={sk.key} style={s.skillRow}>
+                <View style={s.skillLabelRow}>
+                  <View style={s.skillLeft}>
+                    <Ionicons name={sk.icon} size={14} color="#555" />
+                    <Text style={s.skillName}>{sk.name}</Text>
+                  </View>
+                  <Text style={s.skillPct}>{pct}%</Text>
                 </View>
-                <Text style={s.skillPct}>{sk.pct}%</Text>
+                <View style={s.barTrack}>
+                  <View style={[s.barFill, { width: `${pct}%` as any, backgroundColor: sk.color }]} />
+                </View>
               </View>
-              <View style={s.barTrack}>
-                <View style={[s.barFill, { width: `${sk.pct}%` as any, backgroundColor: sk.color }]} />
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* Quick actions for profesor/admin */}

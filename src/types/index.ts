@@ -10,6 +10,10 @@ export type UserProfile = {
   tipo: TipoUsuario;
   fecha_registro: string;
   xp_total: number;
+  puntos_reading:   number;
+  puntos_writing:   number;
+  puntos_listening: number;
+  puntos_speaking:  number;
 };
 
 export type Curso = {
@@ -59,7 +63,7 @@ export type ProgresoUsuario = {
   completado_en: string | null;
 };
 
-export type TipoPregunta = 'opcion_multiple' | 'completar_frase' | 'pronunciacion';
+export type TipoPregunta = 'opcion_multiple' | 'completar_frase' | 'pronunciacion' | 'listening';
 
 export type Pregunta = {
   id: string;

@@ -150,7 +150,7 @@ function AppTabs() {
         name="PerfilTab"
         component={PerfilScreen}
         options={{
-          title: 'Mi Perfil',
+          headerShown: false,
           tabBarLabel: 'Perfil',
           tabBarIcon: ({ focused, color }) =>
             <Ionicons name={focused ? 'person' : 'person-outline'} size={22} color={color} />,

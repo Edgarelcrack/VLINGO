@@ -20,6 +20,7 @@ const TIPO_LABEL: Record<TipoPregunta, string> = {
   opcion_multiple: 'Opción múltiple',
   completar_frase: 'Completar la frase',
   pronunciacion: 'Pronunciación',
+  listening: 'Listening',
 };
 
 const LETRAS = ['A', 'B', 'C', 'D'];
@@ -151,6 +152,21 @@ export default function EditorPreguntasScreen({ navigation, route }: any) {
                     Esperado: {p.opciones[0]}
                   </Text>
                 </View>
+              ) : p.tipo === 'listening' ? (
+                <>
+                  <View style={[s.opcionRow, { backgroundColor: '#FFF4E0' }]}>
+                    <Ionicons name="headset-outline" size={16} color="#B8860B" />
+                    <Text style={[s.opcionTxt, { color: '#B8860B', fontWeight: '700' }]} numberOfLines={1}>
+                      Audio: {p.opciones[1]}
+                    </Text>
+                  </View>
+                  <View style={[s.opcionRow, { backgroundColor: '#F0F4FF' }]}>
+                    <Ionicons name="checkmark-circle-outline" size={16} color={NAVY} />
+                    <Text style={[s.opcionTxt, { color: NAVY, fontWeight: '700' }]} numberOfLines={2}>
+                      Esperado: {p.opciones[0]}
+                    </Text>
+                  </View>
+                </>
               ) : (
                 p.opciones.map((op, idx) => {
                   const correcta = idx === p.respuesta_correcta;
@@ -236,6 +252,7 @@ function PreguntaModal({
   const [opciones, setOpciones]                   = useState<string[]>(['', '', '', '']);
   const [correcta, setCorrecta]                   = useState(0);
   const [transcripcionEsperada, setTranscripcion] = useState('');
+  const [audioUrl, setAudioUrl]                   = useState('');
   const [guardando, setGuardando]                 = useState(false);
 
   useEffect(() => {
@@ -245,9 +262,15 @@ function PreguntaModal({
       setEnunciado(inicial?.enunciado ?? '');
       if (t === 'pronunciacion') {
         setTranscripcion(inicial?.opciones[0] ?? '');
+        setAudioUrl('');
+        setOpciones(['', '', '', '']);
+      } else if (t === 'listening') {
+        setTranscripcion(inicial?.opciones[0] ?? '');
+        setAudioUrl(inicial?.opciones[1] ?? '');
         setOpciones(['', '', '', '']);
       } else {
         setTranscripcion('');
+        setAudioUrl('');
         setOpciones(inicial?.opciones && inicial.opciones.length === 4
           ? [...inicial.opciones]
           : ['', '', '', '']);
@@ -261,15 +284,18 @@ function PreguntaModal({
     setOpciones(prev => prev.map((o, i) => i === idx ? valor : o));
   };
 
-  const valido = tipo === 'pronunciacion'
-    ? enunciado.trim().length > 0 && transcripcionEsperada.trim().length > 0
-    : enunciado.trim().length > 0 && opciones.every(o => o.trim().length > 0);
+  const valido =
+    tipo === 'pronunciacion' ? enunciado.trim().length > 0 && transcripcionEsperada.trim().length > 0 :
+    tipo === 'listening'     ? enunciado.trim().length > 0 && transcripcionEsperada.trim().length > 0 && audioUrl.trim().length > 0 :
+    enunciado.trim().length > 0 && opciones.every(o => o.trim().length > 0);
 
   const handleSave = () => {
     if (!valido || guardando) return;
     setGuardando(true);
     if (tipo === 'pronunciacion') {
       onSave({ tipo, enunciado: enunciado.trim(), opciones: [transcripcionEsperada.trim()], respuesta_correcta: 0 });
+    } else if (tipo === 'listening') {
+      onSave({ tipo, enunciado: enunciado.trim(), opciones: [transcripcionEsperada.trim(), audioUrl.trim()], respuesta_correcta: 0 });
     } else {
       onSave({ tipo, enunciado: enunciado.trim(), opciones: opciones.map(o => o.trim()), respuesta_correcta: correcta });
     }
@@ -291,8 +317,13 @@ function PreguntaModal({
           >
             <Text style={m.label}>Tipo de pregunta</Text>
             <View style={m.tipoRow}>
-              {(['opcion_multiple', 'completar_frase', 'pronunciacion'] as TipoPregunta[]).map(t => {
+              {(['opcion_multiple', 'completar_frase', 'pronunciacion', 'listening'] as TipoPregunta[]).map(t => {
                 const active = tipo === t;
+                const icon =
+                  t === 'pronunciacion' ? 'mic-outline' :
+                  t === 'completar_frase' ? 'text-outline' :
+                  t === 'listening' ? 'headset-outline' :
+                  'list-outline';
                 return (
                   <TouchableOpacity
                     key={t}
@@ -300,10 +331,7 @@ function PreguntaModal({
                     onPress={() => setTipo(t)}
                     activeOpacity={0.85}
                   >
-                    <Ionicons
-                      name={t === 'pronunciacion' ? 'mic-outline' : t === 'completar_frase' ? 'text-outline' : 'list-outline'}
-                      size={12} color={active ? '#fff' : '#666'}
-                    />
+                    <Ionicons name={icon} size={12} color={active ? '#fff' : '#666'} />
                     <Text style={[m.tipoBtnTxt, active && { color: '#fff' }]}>
                       {TIPO_LABEL[t]}
                     </Text>
@@ -313,7 +341,8 @@ function PreguntaModal({
             </View>
 
             <Text style={m.label}>
-              {tipo === 'pronunciacion' ? 'Frase a pronunciar' : 'Enunciado'}
+              {tipo === 'pronunciacion' ? 'Frase a pronunciar' :
+               tipo === 'listening'     ? 'Pregunta sobre el audio' : 'Enunciado'}
             </Text>
             <TextInput
               style={[m.input, m.inputMulti]}
@@ -322,6 +351,7 @@ function PreguntaModal({
               placeholder={
                 tipo === 'completar_frase' ? 'Ej: Yo ___ a la escuela todos los días' :
                 tipo === 'pronunciacion'   ? 'Ej: The weather is beautiful today' :
+                tipo === 'listening'       ? 'Ej: ¿Sobre qué tema habla el audio?' :
                 'Escribe la pregunta…'
               }
               placeholderTextColor="#BBB"
@@ -344,6 +374,35 @@ function PreguntaModal({
                   <Ionicons name="information-circle-outline" size={14} color="#888" />
                   <Text style={m.pronHintTxt}>
                     Escribe en minúsculas sin puntuación. Se comparará con lo que diga el estudiante.
+                  </Text>
+                </View>
+              </>
+            ) : tipo === 'listening' ? (
+              <>
+                <Text style={m.label}>URL del audio</Text>
+                <TextInput
+                  style={m.input}
+                  value={audioUrl}
+                  onChangeText={setAudioUrl}
+                  placeholder="https://... (mp3, m4a, wav)"
+                  placeholderTextColor="#BBB"
+                  autoCapitalize="none"
+                  keyboardType="url"
+                />
+                <Text style={m.label}>Respuesta esperada del estudiante</Text>
+                <TextInput
+                  style={[m.input, m.inputMulti]}
+                  value={transcripcionEsperada}
+                  onChangeText={setTranscripcion}
+                  placeholder="Escribe la respuesta correcta…"
+                  placeholderTextColor="#BBB"
+                  multiline
+                  textAlignVertical="top"
+                />
+                <View style={m.pronHint}>
+                  <Ionicons name="information-circle-outline" size={14} color="#888" />
+                  <Text style={m.pronHintTxt}>
+                    La respuesta se compara con lo que escriba el estudiante (coincidencia aproximada).
                   </Text>
                 </View>
               </>

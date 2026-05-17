@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { Curso, Seccion, SeccionArbol, ProgresoUsuario, EstadoSeccion } from '../types';
+import { incrementarPuntos } from './puntuacionService';
 
 
 
@@ -429,6 +430,10 @@ export const marcarCompletadaYAvanzar = async (
     .eq('id', seccionId)
     .maybeSingle();
   if (!actual) return { error: null, xpGanado };
+
+  if (actual.tipo === 'leccion') {
+    await incrementarPuntos(userId, 'reading', 1);
+  }
 
   const hermanas = await getHermanas(actual.curso_id, actual.parent_id);
   const siguiente = hermanas.find(h => h.orden > actual.orden);

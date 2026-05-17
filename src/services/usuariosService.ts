@@ -4,7 +4,7 @@ import { UserProfile } from '../types';
 export const getUserProfile = async (userId: string): Promise<{ data: UserProfile | null; error: string | null }> => {
   const { data, error } = await supabase
     .from('usuario')
-    .select('id, nombre, email, nivel, tipo, fecha_registro, xp_total')
+    .select('id, nombre, email, nivel, tipo, fecha_registro, xp_total, puntos_reading, puntos_writing, puntos_listening, puntos_speaking')
     .eq('id', userId)
     .single();
   return { data: data as UserProfile | null, error: error?.message ?? null };

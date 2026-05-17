@@ -32,7 +32,18 @@ export const crearPregunta = async (params: {
   if (!params.enunciado.trim()) {
     return { data: null, error: 'El enunciado no puede estar vacío' };
   }
-  if (params.tipo !== 'pronunciacion') {
+  if (params.tipo === 'pronunciacion') {
+    if (!params.opciones[0]?.trim()) {
+      return { data: null, error: 'La transcripción esperada no puede estar vacía' };
+    }
+  } else if (params.tipo === 'listening') {
+    if (!params.opciones[0]?.trim()) {
+      return { data: null, error: 'La respuesta esperada no puede estar vacía' };
+    }
+    if (!params.opciones[1]?.trim()) {
+      return { data: null, error: 'La URL del audio no puede estar vacía' };
+    }
+  } else {
     if (params.opciones.length !== 4) {
       return { data: null, error: 'Cada pregunta debe tener exactamente 4 opciones' };
     }
@@ -41,10 +52,6 @@ export const crearPregunta = async (params: {
     }
     if (params.opciones.some(o => !o.trim())) {
       return { data: null, error: 'Todas las opciones deben tener texto' };
-    }
-  } else {
-    if (!params.opciones[0]?.trim()) {
-      return { data: null, error: 'La transcripción esperada no puede estar vacía' };
     }
   }
 

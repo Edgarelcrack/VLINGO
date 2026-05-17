@@ -2,12 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Animated, Easing,
   StyleSheet, ActivityIndicator, ToastAndroid, Platform, Alert,
-  LayoutAnimation,
+  LayoutAnimation, TextInput, Keyboard,
 } from 'react-native';
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from 'expo-speech-recognition';
+import { Audio } from 'expo-av';
+let SpeechModule: any = null;
+try { SpeechModule = require('expo-speech-recognition').ExpoSpeechRecognitionModule; } catch {}
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,6 +15,7 @@ import {
   getSecciones, getProgresoPorCurso, marcarCompletadaYAvanzar, upsertProgreso,
 } from '../services/cursosService';
 import { getPreguntasPorSeccion } from '../services/preguntasService';
+import { incrementarPuntos } from '../services/puntuacionService';
 import { Seccion, ProgresoUsuario, EstadoSeccion, ContenidoBloque, Pregunta } from '../types';
 
 type SeccionConEstado = Seccion & { estado: EstadoSeccion };
@@ -490,48 +490,61 @@ function PronunciacionCard({
   const [transcripcion, setTranscripcion] = useState(saved?.transcripcion ?? '');
   const [resultado, setResultado]       = useState<PronResultado['resultado'] | null>(saved?.resultado ?? null);
 
-  const transcRef  = useRef(saved?.transcripcion ?? '');
+  const transcRef   = useRef(saved?.transcripcion ?? '');
   const listeningRef = useRef(false);
-  const doneRef    = useRef(saved?.resultado != null);
+  const doneRef     = useRef(saved?.resultado != null);
+  const onResultRef = useRef(onResult);
+  useEffect(() => { onResultRef.current = onResult; }, [onResult]);
 
   const esperado = pregunta.opciones[0] ?? '';
+  const esperadoRef = useRef(esperado);
 
-  useSpeechRecognitionEvent('result', (event: any) => {
-    if (!listeningRef.current) return;
-    const text: string = event.results?.[0]?.transcript ?? '';
-    if (text) {
-      transcRef.current = text;
-      setTranscripcion(text);
-    }
-  });
+  // Listeners via addListener (works with or without native module)
+  useEffect(() => {
+    if (!SpeechModule) return;
+    const sub = SpeechModule.addListener('result', (event: any) => {
+      if (!listeningRef.current) return;
+      const text: string = event.results?.[0]?.transcript ?? '';
+      if (text) { transcRef.current = text; setTranscripcion(text); }
+    });
+    return () => sub?.remove();
+  }, []);
 
-  useSpeechRecognitionEvent('end', () => {
-    if (!listeningRef.current) return;
-    listeningRef.current = false;
-    setIsListening(false);
-    const texto = transcRef.current;
-    if (texto && !doneRef.current) {
-      doneRef.current = true;
-      const res = compareTexts(texto, esperado);
-      expandPreset();
-      setResultado(res);
-      onResult({ transcripcion: texto, resultado: res });
-    }
-  });
+  useEffect(() => {
+    if (!SpeechModule) return;
+    const sub = SpeechModule.addListener('end', () => {
+      if (!listeningRef.current) return;
+      listeningRef.current = false;
+      setIsListening(false);
+      const texto = transcRef.current;
+      if (texto && !doneRef.current) {
+        doneRef.current = true;
+        const res = compareTexts(texto, esperadoRef.current);
+        expandPreset();
+        setResultado(res);
+        onResultRef.current({ transcripcion: texto, resultado: res });
+      }
+    });
+    return () => sub?.remove();
+  }, []);
 
-  useSpeechRecognitionEvent('error', () => {
-    if (!listeningRef.current) return;
-    listeningRef.current = false;
-    setIsListening(false);
-  });
+  useEffect(() => {
+    if (!SpeechModule) return;
+    const sub = SpeechModule.addListener('error', () => {
+      if (!listeningRef.current) return;
+      listeningRef.current = false;
+      setIsListening(false);
+    });
+    return () => sub?.remove();
+  }, []);
 
   const handleMic = async () => {
-    if (resultado !== null) return;
+    if (!SpeechModule || resultado !== null) return;
     if (isListening) {
-      ExpoSpeechRecognitionModule.stop();
+      SpeechModule.stop();
       return;
     }
-    const { status } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    const { status } = await SpeechModule.requestPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert(
         'Micrófono necesario',
@@ -543,7 +556,7 @@ function PronunciacionCard({
     setTranscripcion('');
     listeningRef.current = true;
     setIsListening(true);
-    ExpoSpeechRecognitionModule.start({ lang: 'en-US', interimResults: true, continuous: false });
+    SpeechModule.start({ lang: 'en-US', interimResults: true, continuous: false });
   };
 
   const isAnswered = resultado !== null;
@@ -574,7 +587,14 @@ function PronunciacionCard({
         <Text style={pron.phrase}>{pregunta.enunciado}</Text>
       </View>
 
-      {!isAnswered && (
+      {!SpeechModule && (
+        <View style={pron.unavailableBox}>
+          <Ionicons name="information-circle-outline" size={15} color="#888" />
+          <Text style={pron.unavailableTxt}>El reconocimiento de voz requiere un build nativo. No disponible en Expo Go.</Text>
+        </View>
+      )}
+
+      {SpeechModule && !isAnswered && (
         <TouchableOpacity
           style={[pron.micBtn, isListening && pron.micBtnActive]}
           onPress={handleMic}
@@ -607,10 +627,236 @@ function PronunciacionCard({
   );
 }
 
+type WriteResultado = { respuesta: string; resultado: 'correct' | 'partial' | 'wrong' };
+const writeStorageKey = (userId: string) => `quiz_write:${userId}`;
+
+function CompletarFraseCard({
+  pregunta,
+  saved,
+  onResult,
+}: {
+  pregunta: Pregunta;
+  saved: WriteResultado | undefined;
+  onResult: (data: WriteResultado) => void;
+}) {
+  const esperado = pregunta.opciones[pregunta.respuesta_correcta] ?? '';
+  const [respuesta, setRespuesta] = useState(saved?.respuesta ?? '');
+  const [resultado, setResultado] = useState<WriteResultado['resultado'] | null>(saved?.resultado ?? null);
+
+  const comprobar = () => {
+    if (!respuesta.trim() || resultado !== null) return;
+    Keyboard.dismiss();
+    const res = compareTexts(respuesta.trim(), esperado);
+    expandPreset();
+    setResultado(res);
+    onResult({ respuesta: respuesta.trim(), resultado: res });
+  };
+
+  const isAnswered = resultado !== null;
+  const resultColor =
+    resultado === 'correct' ? '#2E7D52' :
+    resultado === 'partial'  ? '#B8860B' : '#E05A4E';
+  const resultIcon =
+    resultado === 'correct' ? 'checkmark-circle' :
+    resultado === 'partial'  ? 'alert-circle' : 'close-circle' as any;
+  const resultMsg =
+    resultado === 'correct' ? '¡Correcto!' :
+    resultado === 'partial'  ? 'Muy cerca' : 'No coincide';
+
+  return (
+    <View style={write.card}>
+      <View style={write.head}>
+        <View style={write.iconWrap}>
+          <Ionicons name="create" size={14} color="#2B4C72" />
+        </View>
+        <Text style={write.tipo}>Completar frase</Text>
+      </View>
+
+      <View style={write.phraseBox}>
+        <Text style={write.phrase}>{pregunta.enunciado}</Text>
+      </View>
+
+      <Text style={write.inputLabel}>Completa el espacio en blanco:</Text>
+      <TextInput
+        style={[write.input, isAnswered && { opacity: 0.6 }]}
+        value={respuesta}
+        onChangeText={setRespuesta}
+        placeholder="Escribe tu respuesta…"
+        placeholderTextColor="#BBB"
+        editable={!isAnswered}
+        onSubmitEditing={comprobar}
+        returnKeyType="done"
+      />
+
+      {!isAnswered && (
+        <TouchableOpacity
+          style={[write.checkBtn, !respuesta.trim() && { opacity: 0.4 }]}
+          onPress={comprobar}
+          disabled={!respuesta.trim()}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="checkmark" size={16} color="#fff" />
+          <Text style={write.checkBtnTxt}>Comprobar</Text>
+        </TouchableOpacity>
+      )}
+
+      {isAnswered && (
+        <View style={[write.resultBox, { borderColor: resultColor + '40', backgroundColor: resultColor + '14' }]}>
+          <Ionicons name={resultIcon} size={18} color={resultColor} />
+          <View style={{ flex: 1 }}>
+            <Text style={[write.resultTxt, { color: resultColor }]}>{resultMsg}</Text>
+            {resultado !== 'correct' && (
+              <Text style={write.esperadoTxt}>Respuesta: "{esperado}"</Text>
+            )}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+type ListenResultado = { respuesta: string; resultado: 'correct' | 'partial' | 'wrong' };
+const listenStorageKey = (userId: string) => `quiz_listen:${userId}`;
+
+function ListeningCard({
+  pregunta,
+  saved,
+  onResult,
+}: {
+  pregunta: Pregunta;
+  saved: ListenResultado | undefined;
+  onResult: (data: ListenResultado) => void;
+}) {
+  const audioUrl   = pregunta.opciones[1] ?? '';
+  const esperado   = pregunta.opciones[0] ?? '';
+
+  const [sound, setSound]           = useState<Audio.Sound | null>(null);
+  const [isPlaying, setIsPlaying]   = useState(false);
+  const [isLoading, setIsLoading]   = useState(false);
+  const [respuesta, setRespuesta]   = useState(saved?.respuesta ?? '');
+  const [resultado, setResultado]   = useState<ListenResultado['resultado'] | null>(saved?.resultado ?? null);
+
+  useEffect(() => {
+    return () => { sound?.unloadAsync(); };
+  }, [sound]);
+
+  const toggleAudio = async () => {
+    if (!audioUrl) { Alert.alert('Sin audio', 'Esta pregunta no tiene audio configurado.'); return; }
+    if (isLoading) return;
+    if (sound) {
+      if (isPlaying) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        await sound.playAsync();
+        setIsPlaying(true);
+      }
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true },
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+      newSound.setOnPlaybackStatusUpdate(status => {
+        if (status.isLoaded && status.didJustFinish) setIsPlaying(false);
+      });
+    } catch {
+      Alert.alert('Error', 'No se pudo cargar el audio. Verifica la URL.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const comprobar = () => {
+    if (!respuesta.trim() || resultado !== null) return;
+    Keyboard.dismiss();
+    const res = compareTexts(respuesta.trim(), esperado);
+    expandPreset();
+    setResultado(res);
+    onResult({ respuesta: respuesta.trim(), resultado: res });
+  };
+
+  const isAnswered = resultado !== null;
+  const resultColor =
+    resultado === 'correct' ? '#2E7D52' :
+    resultado === 'partial'  ? '#B8860B' : '#E05A4E';
+  const resultIcon =
+    resultado === 'correct' ? 'checkmark-circle' :
+    resultado === 'partial'  ? 'alert-circle' : 'close-circle' as any;
+  const resultMsg =
+    resultado === 'correct' ? '¡Correcto!' :
+    resultado === 'partial'  ? 'Casi, muy bien' : 'No es exacto';
+
+  return (
+    <View style={listen.card}>
+      <View style={listen.head}>
+        <View style={listen.iconWrap}>
+          <Ionicons name="headset" size={15} color="#B8860B" />
+        </View>
+        <Text style={listen.tipo}>Listening</Text>
+      </View>
+
+      <TouchableOpacity
+        style={[listen.audioBtn, isPlaying && listen.audioBtnActive]}
+        onPress={toggleAudio}
+        activeOpacity={0.8}
+      >
+        {isLoading
+          ? <ActivityIndicator size="small" color="#fff" />
+          : <Ionicons name={isPlaying ? 'pause' : 'play'} size={20} color="#fff" />}
+        <Text style={listen.audioBtnTxt}>{isPlaying ? 'Pausar audio' : 'Reproducir audio'}</Text>
+      </TouchableOpacity>
+
+      <Text style={listen.pregunta}>{pregunta.enunciado}</Text>
+
+      <Text style={listen.inputLabel}>Tu respuesta:</Text>
+      <TextInput
+        style={[listen.input, isAnswered && { opacity: 0.6 }]}
+        value={respuesta}
+        onChangeText={setRespuesta}
+        placeholder="Escribe tu respuesta aquí…"
+        placeholderTextColor="#BBB"
+        multiline
+        textAlignVertical="top"
+        editable={!isAnswered}
+      />
+
+      {!isAnswered && (
+        <TouchableOpacity
+          style={[listen.checkBtn, !respuesta.trim() && { opacity: 0.4 }]}
+          onPress={comprobar}
+          disabled={!respuesta.trim()}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="checkmark" size={16} color="#fff" />
+          <Text style={listen.checkBtnTxt}>Comprobar respuesta</Text>
+        </TouchableOpacity>
+      )}
+
+      {isAnswered && (
+        <View style={[listen.resultBox, { borderColor: resultColor + '40', backgroundColor: resultColor + '14' }]}>
+          <Ionicons name={resultIcon} size={20} color={resultColor} />
+          <View style={{ flex: 1 }}>
+            <Text style={[listen.resultTxt, { color: resultColor }]}>{resultMsg}</Text>
+            <Text style={listen.esperadoTxt} numberOfLines={3}>Respuesta esperada: "{esperado}"</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
   const { user } = useAuth();
-  const [respuestas, setRespuestas]     = useState<Record<string, number>>({});
-  const [pronResultados, setPronResultados] = useState<Record<string, PronResultado>>({});
+  const [respuestas, setRespuestas]             = useState<Record<string, number>>({});
+  const [pronResultados, setPronResultados]     = useState<Record<string, PronResultado>>({});
+  const [listenResultados, setListenResultados] = useState<Record<string, ListenResultado>>({});
+  const [writeResultados, setWriteResultados]   = useState<Record<string, WriteResultado>>({});
 
   const preguntaIds = preguntas.map(p => p.id).join(',');
 
@@ -618,8 +864,10 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
     if (!user || preguntas.length === 0) return;
     let alive = true;
 
-    const mcPregs   = preguntas.filter(p => p.tipo !== 'pronunciacion');
-    const pronPregs = preguntas.filter(p => p.tipo === 'pronunciacion');
+    const mcPregs     = preguntas.filter(p => p.tipo === 'opcion_multiple');
+    const writePregs  = preguntas.filter(p => p.tipo === 'completar_frase');
+    const pronPregs   = preguntas.filter(p => p.tipo === 'pronunciacion');
+    const listenPregs = preguntas.filter(p => p.tipo === 'listening');
 
     if (mcPregs.length > 0) {
       AsyncStorage.getItem(quizStorageKey(user.id)).then(raw => {
@@ -632,7 +880,6 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
         } catch {}
       });
     }
-
     if (pronPregs.length > 0) {
       AsyncStorage.getItem(pronStorageKey(user.id)).then(raw => {
         if (!alive || !raw) return;
@@ -641,6 +888,28 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
           const aplicables: Record<string, PronResultado> = {};
           pronPregs.forEach(p => { if (guardadas[p.id]) aplicables[p.id] = guardadas[p.id]; });
           if (Object.keys(aplicables).length > 0) setPronResultados(aplicables);
+        } catch {}
+      });
+    }
+    if (writePregs.length > 0) {
+      AsyncStorage.getItem(writeStorageKey(user.id)).then(raw => {
+        if (!alive || !raw) return;
+        try {
+          const guardadas = JSON.parse(raw) as Record<string, WriteResultado>;
+          const aplicables: Record<string, WriteResultado> = {};
+          writePregs.forEach(p => { if (guardadas[p.id]) aplicables[p.id] = guardadas[p.id]; });
+          if (Object.keys(aplicables).length > 0) setWriteResultados(aplicables);
+        } catch {}
+      });
+    }
+    if (listenPregs.length > 0) {
+      AsyncStorage.getItem(listenStorageKey(user.id)).then(raw => {
+        if (!alive || !raw) return;
+        try {
+          const guardadas = JSON.parse(raw) as Record<string, ListenResultado>;
+          const aplicables: Record<string, ListenResultado> = {};
+          listenPregs.forEach(p => { if (guardadas[p.id]) aplicables[p.id] = guardadas[p.id]; });
+          if (Object.keys(aplicables).length > 0) setListenResultados(aplicables);
         } catch {}
       });
     }
@@ -674,20 +943,51 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
         const all = raw ? (JSON.parse(raw) as Record<string, PronResultado>) : {};
         all[pregId] = data;
         await AsyncStorage.setItem(key, JSON.stringify(all));
+        await incrementarPuntos(user.id, 'speaking', 1);
+      } catch {}
+    }
+  };
+
+  const guardarListenResultado = async (pregId: string, data: ListenResultado) => {
+    setListenResultados(prev => ({ ...prev, [pregId]: data }));
+    if (user) {
+      try {
+        const key = listenStorageKey(user.id);
+        const raw = await AsyncStorage.getItem(key);
+        const all = raw ? (JSON.parse(raw) as Record<string, ListenResultado>) : {};
+        all[pregId] = data;
+        await AsyncStorage.setItem(key, JSON.stringify(all));
+        await incrementarPuntos(user.id, 'listening', 1);
+      } catch {}
+    }
+  };
+
+  const guardarWriteResultado = async (pregId: string, data: WriteResultado) => {
+    setWriteResultados(prev => ({ ...prev, [pregId]: data }));
+    if (user) {
+      try {
+        const key = writeStorageKey(user.id);
+        const raw = await AsyncStorage.getItem(key);
+        const all = raw ? (JSON.parse(raw) as Record<string, WriteResultado>) : {};
+        all[pregId] = data;
+        await AsyncStorage.setItem(key, JSON.stringify(all));
+        await incrementarPuntos(user.id, 'writing', 1);
       } catch {}
     }
   };
 
   const respondidas = preguntas.filter(p =>
-    p.tipo === 'pronunciacion'
-      ? pronResultados[p.id] !== undefined
-      : respuestas[p.id] !== undefined
+    p.tipo === 'pronunciacion'   ? pronResultados[p.id]   !== undefined :
+    p.tipo === 'listening'       ? listenResultados[p.id] !== undefined :
+    p.tipo === 'completar_frase' ? writeResultados[p.id]  !== undefined :
+    respuestas[p.id] !== undefined
   ).length;
 
   const correctas = preguntas.filter(p =>
-    p.tipo === 'pronunciacion'
-      ? pronResultados[p.id]?.resultado === 'correct'
-      : respuestas[p.id] === p.respuesta_correcta
+    p.tipo === 'pronunciacion'   ? pronResultados[p.id]?.resultado   === 'correct' :
+    p.tipo === 'listening'       ? listenResultados[p.id]?.resultado === 'correct' :
+    p.tipo === 'completar_frase' ? writeResultados[p.id]?.resultado  === 'correct' :
+    respuestas[p.id] === p.respuesta_correcta
   ).length;
 
   return (
@@ -710,6 +1010,30 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
                 pregunta={p}
                 saved={pronResultados[p.id]}
                 onResult={(data) => guardarPronResultado(p.id, data)}
+              />
+            </FadeInView>
+          );
+        }
+
+        if (p.tipo === 'listening') {
+          return (
+            <FadeInView key={p.id} delay={80 * idx}>
+              <ListeningCard
+                pregunta={p}
+                saved={listenResultados[p.id]}
+                onResult={(data) => guardarListenResultado(p.id, data)}
+              />
+            </FadeInView>
+          );
+        }
+
+        if (p.tipo === 'completar_frase') {
+          return (
+            <FadeInView key={p.id} delay={80 * idx}>
+              <CompletarFraseCard
+                pregunta={p}
+                saved={writeResultados[p.id]}
+                onResult={(data) => guardarWriteResultado(p.id, data)}
               />
             </FadeInView>
           );
@@ -1090,4 +1414,103 @@ const pron = StyleSheet.create({
   },
   resultTxt: { fontSize: 13, fontWeight: '800', marginBottom: 3 },
   transcTxt: { fontSize: 11, color: '#888', fontStyle: 'italic' },
+
+  unavailableBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: '#F5F5F5', borderRadius: 8,
+    padding: 10, marginTop: 4,
+  },
+  unavailableTxt: { flex: 1, fontSize: 12, color: '#888', lineHeight: 17 },
+});
+
+const write = StyleSheet.create({
+  card: {
+    backgroundColor: '#fff', borderRadius: 14,
+    padding: 14, marginBottom: 10,
+    borderWidth: 1.5, borderColor: 'rgba(43,76,114,0.12)',
+  },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  iconWrap: {
+    width: 28, height: 28, borderRadius: 8,
+    backgroundColor: 'rgba(43,76,114,0.10)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tipo: { fontSize: 11, fontWeight: '800', color: '#2B4C72', textTransform: 'uppercase', letterSpacing: 0.8 },
+  phraseBox: {
+    backgroundColor: '#F4F6F9', borderRadius: 10,
+    padding: 14, marginBottom: 12,
+    borderLeftWidth: 3, borderLeftColor: '#2B4C72',
+  },
+  phrase: { fontSize: 15, fontWeight: '700', color: '#111', lineHeight: 22 },
+  inputLabel: { fontSize: 11, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+  input: {
+    backgroundColor: '#F5F6F8', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 13, color: '#111',
+    borderWidth: 1, borderColor: '#E0E0E0',
+    marginBottom: 10,
+  },
+  checkBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#2B4C72', borderRadius: 10,
+    paddingVertical: 11, marginBottom: 4,
+  },
+  checkBtnTxt: { fontSize: 13, fontWeight: '800', color: '#fff' },
+  resultBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    borderRadius: 10, borderWidth: 1.5,
+    paddingHorizontal: 12, paddingVertical: 10, marginTop: 4,
+  },
+  resultTxt:   { fontSize: 13, fontWeight: '800', marginBottom: 3 },
+  esperadoTxt: { fontSize: 11, color: '#666', lineHeight: 16 },
+});
+
+const listen = StyleSheet.create({
+  card: {
+    backgroundColor: '#fff', borderRadius: 14,
+    padding: 14, marginBottom: 10,
+    borderWidth: 1.5, borderColor: 'rgba(184,134,11,0.18)',
+  },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  iconWrap: {
+    width: 28, height: 28, borderRadius: 8,
+    backgroundColor: 'rgba(184,134,11,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  tipo: { fontSize: 11, fontWeight: '800', color: '#B8860B', textTransform: 'uppercase', letterSpacing: 0.8 },
+
+  audioBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#B8860B', borderRadius: 10,
+    paddingVertical: 11, marginBottom: 14,
+  },
+  audioBtnActive: { backgroundColor: '#2B4C72' },
+  audioBtnTxt: { fontSize: 13, fontWeight: '800', color: '#fff' },
+
+  pregunta: { fontSize: 14, fontWeight: '700', color: '#222', lineHeight: 20, marginBottom: 10 },
+
+  inputLabel: { fontSize: 11, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
+  input: {
+    backgroundColor: '#F5F6F8', borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 13, color: '#111',
+    borderWidth: 1, borderColor: '#E0E0E0',
+    minHeight: 72, marginBottom: 10,
+    textAlignVertical: 'top',
+  },
+
+  checkBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#2E7D52', borderRadius: 10,
+    paddingVertical: 11, marginBottom: 6,
+  },
+  checkBtnTxt: { fontSize: 13, fontWeight: '800', color: '#fff' },
+
+  resultBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    borderRadius: 10, borderWidth: 1.5,
+    paddingHorizontal: 12, paddingVertical: 10, marginTop: 4,
+  },
+  resultTxt:  { fontSize: 13, fontWeight: '800', marginBottom: 4 },
+  esperadoTxt: { fontSize: 11, color: '#666', lineHeight: 16 },
 });

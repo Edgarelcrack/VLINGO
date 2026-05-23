@@ -252,11 +252,7 @@ export const getSecciones = async (
   return { data: (data as Seccion[]) ?? [], error: error?.message ?? null };
 };
 
-/**
- * Construye una representación en texto plano del contenido completo de un
- * curso (curso → secciones → lecciones → bloques de contenido).
- * Pensada para inyectar como contexto al chat con la IA.
- */
+// Inyeccion de contenido de los cursos en texto plano para darselo a la IA.
 export const getCursoContentText = async (cursoId: string): Promise<string> => {
   const [{ data: curso }, { data: secciones }] = await Promise.all([
     getCurso(cursoId),

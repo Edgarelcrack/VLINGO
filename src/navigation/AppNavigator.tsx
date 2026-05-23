@@ -23,6 +23,17 @@ import EditorContenidoScreen  from '../screens/EditorContenidoScreen';
 
 import { useAuth } from '../context/AuthContext';
 import { Colors } from '../theme';
+import AnimatedScreen from '../components/AnimatedScreen';
+
+const withFade = <P extends object>(Component: React.ComponentType<P>) => {
+  const Wrapped = (props: P) => (
+    <AnimatedScreen>
+      <Component {...props} />
+    </AnimatedScreen>
+  );
+  Wrapped.displayName = `Animated(${Component.displayName ?? Component.name ?? 'Screen'})`;
+  return Wrapped;
+};
 
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -78,6 +89,11 @@ function ChatStack() {
   );
 }
 
+const HomeStackAnimated    = withFade(HomeStack);
+const LessonsStackAnimated = withFade(LessonsStack);
+const ChatStackAnimated    = withFade(ChatStack);
+const PerfilScreenAnimated = withFade(PerfilScreen);
+
 function AppTabs() {
   const insets = useSafeAreaInsets();
   const baseHeight = Platform.OS === 'ios' ? 64 : 58;
@@ -110,7 +126,7 @@ function AppTabs() {
     >
       <Tab.Screen
         name="HomeTab"
-        component={HomeStack}
+        component={HomeStackAnimated}
         options={{
           headerShown: false,
           tabBarLabel: 'Home',
@@ -120,7 +136,7 @@ function AppTabs() {
       />
       <Tab.Screen
         name="LessonsTab"
-        component={LessonsStack}
+        component={LessonsStackAnimated}
         options={{
           headerShown: false,
           tabBarLabel: 'Cursos',
@@ -138,7 +154,7 @@ function AppTabs() {
       />
       <Tab.Screen
         name="ChatTab"
-        component={ChatStack}
+        component={ChatStackAnimated}
         options={{
           headerShown: false,
           tabBarLabel: 'Chat',
@@ -148,7 +164,7 @@ function AppTabs() {
       />
       <Tab.Screen
         name="PerfilTab"
-        component={PerfilScreen}
+        component={PerfilScreenAnimated}
         options={{
           headerShown: false,
           tabBarLabel: 'Perfil',

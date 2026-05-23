@@ -44,10 +44,15 @@ export default function LoginScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
         <ScrollView
           contentContainerStyle={s.content}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
         >
           <View style={s.logoWrap}>
@@ -132,7 +137,7 @@ export default function LoginScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
-  content: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 32, justifyContent: 'center' },
+  content: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 32, paddingBottom: 80, justifyContent: 'center' },
 
   // Logo
   logoWrap: { alignItems: 'center', marginBottom: 36 },

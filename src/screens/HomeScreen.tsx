@@ -122,7 +122,9 @@ export default function HomeScreen({ navigation }: any) {
               activeOpacity={0.85}
               onPress={() => navigation.navigate('LessonsTab', { screen: 'CrearCurso' })}
             >
-              <Text style={s.actionIcon}>+</Text>
+              <View style={s.actionIconWrap}>
+                <Ionicons name="add-circle-outline" size={26} color="#fff" />
+              </View>
               <Text style={s.actionTxt}>Crear curso</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -130,7 +132,9 @@ export default function HomeScreen({ navigation }: any) {
               activeOpacity={0.85}
               onPress={() => navigation.navigate('LessonsTab', { screen: 'CursosList' })}
             >
-              <Text style={s.actionIcon}></Text>
+              <View style={s.actionIconWrap}>
+                <Ionicons name="library-outline" size={24} color="#fff" />
+              </View>
               <Text style={s.actionTxt}>Mis cursos</Text>
             </TouchableOpacity>
           </View>
@@ -244,6 +248,11 @@ const s = StyleSheet.create({
     alignItems: 'center', gap: 6,
   },
   actionIcon: { fontSize: 22 },
+  actionIconWrap: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+  },
   actionTxt:  { fontSize: 12, fontWeight: '700', color: '#fff' },
 
   continueCard: {

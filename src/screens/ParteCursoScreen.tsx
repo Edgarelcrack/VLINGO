@@ -301,11 +301,13 @@ export default function ParteCursoScreen({ navigation, route }: any) {
                   <View style={s.expanded}>
                     <View style={s.divider} />
                     {bloques.length > 0 ? (
-                      <BloquesRenderer bloques={bloques} />
+                      <BloquesRenderer bloques={bloques} onDark={isActive} />
                     ) : (
-                      <View style={s.noContent}>
-                        <Ionicons name="document-outline" size={20} color="#BBB" />
-                        <Text style={s.noContentTxt}>Esta lección no tiene contenido todavía</Text>
+                      <View style={[s.noContent, isActive && s.noContentDark]}>
+                        <Ionicons name="document-outline" size={20} color={isActive ? '#fff' : '#BBB'} />
+                        <Text style={[s.noContentTxt, isActive && { color: '#fff' }]}>
+                          Esta lección no tiene contenido todavía
+                        </Text>
                       </View>
                     )}
                     <QuizSection preguntas={preguntasMap[h.id] ?? []} />
@@ -409,14 +411,22 @@ export default function ParteCursoScreen({ navigation, route }: any) {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function BloquesRenderer({ bloques }: { bloques: ContenidoBloque[] }) {
+function BloquesRenderer({
+  bloques,
+  onDark = false,
+}: {
+  bloques: ContenidoBloque[];
+  onDark?: boolean;
+}) {
   return (
     <View>
       {bloques.map((b, i) => {
         if (b.tipo === 'texto') {
           return (
             <View key={i} style={styles.textBlock}>
-              <Text style={styles.bodyText}>{b.valor}</Text>
+              <Text style={[styles.bodyText, onDark && { color: '#fff' }]}>
+                {b.valor}
+              </Text>
             </View>
           );
         }
@@ -1274,6 +1284,7 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: 10,
     marginBottom: 8,
   },
+  noContentDark: { backgroundColor: 'rgba(255,255,255,0.08)' },
   noContentTxt: { fontSize: 13, color: '#999', fontStyle: 'italic' },
 
   completarBtn: {

@@ -77,10 +77,15 @@ export default function RegisterScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
         <ScrollView
           contentContainerStyle={s.content}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
         >
           <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
@@ -268,7 +273,7 @@ export default function RegisterScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   safe:    { flex: 1, backgroundColor: BG },
-  content: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 32 },
+  content: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 32, paddingBottom: 80 },
 
   backBtn:  { marginBottom: 8 },
   backText: { color: NAVY, fontSize: 14, fontWeight: '600' },

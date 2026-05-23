@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Curso, Seccion, SeccionArbol, ProgresoUsuario, EstadoSeccion } from '../types';
+import { Curso, Seccion, SeccionArbol, ProgresoUsuario, EstadoSeccion, ContenidoBloque } from '../types';
 import { incrementarPuntos } from './puntuacionService';
 
 
@@ -250,6 +250,62 @@ export const getSecciones = async (
     .eq('curso_id', cursoId)
     .order('orden');
   return { data: (data as Seccion[]) ?? [], error: error?.message ?? null };
+};
+
+/**
+ * Construye una representación en texto plano del contenido completo de un
+ * curso (curso → secciones → lecciones → bloques de contenido).
+ * Pensada para inyectar como contexto al chat con la IA.
+ */
+export const getCursoContentText = async (cursoId: string): Promise<string> => {
+  const [{ data: curso }, { data: secciones }] = await Promise.all([
+    getCurso(cursoId),
+    getSecciones(cursoId),
+  ]);
+  if (!curso) return '';
+
+  const lines: string[] = [];
+  lines.push(`CURSO: ${curso.titulo}`);
+  if (curso.nivel) lines.push(`NIVEL: ${curso.nivel}`);
+  if (curso.descripcion) lines.push(`DESCRIPCIÓN: ${curso.descripcion}`);
+  lines.push('');
+
+  const tree = buildTree(secciones);
+
+  const renderBloque = (b: ContenidoBloque, indent: string): string[] => {
+    if (b.tipo === 'texto' && b.valor) {
+      return [`${indent}- ${b.valor}`];
+    }
+    if (b.tipo === 'lista' && b.items?.length) {
+      return b.items.map(it => `${indent}- ${it}`);
+    }
+    if (b.tipo === 'ejercicio') {
+      const out = [`${indent}- Ejercicio: ${b.pregunta ?? ''}`];
+      if (b.respuesta) out.push(`${indent}  Respuesta: ${b.respuesta}`);
+      return out;
+    }
+    if (b.tipo === 'audio_url' && b.valor) {
+      return [`${indent}- (Audio): ${b.valor}`];
+    }
+    return [];
+  };
+
+  const walk = (nodes: SeccionArbol[], depth: number) => {
+    for (const n of nodes) {
+      const indent  = '  '.repeat(depth);
+      const label   = n.tipo === 'leccion' ? 'LECCIÓN' : 'SECCIÓN';
+      lines.push(`${indent}${label}: ${n.titulo}`);
+      if (n.descripcion) lines.push(`${indent}  ${n.descripcion}`);
+      const bloques = n.contenido?.bloques ?? [];
+      for (const b of bloques) {
+        lines.push(...renderBloque(b, indent + '  '));
+      }
+      if (n.hijos.length > 0) walk(n.hijos, depth + 1);
+    }
+  };
+
+  walk(tree, 0);
+  return lines.join('\n');
 };
 
 export const buildTree = (secciones: Seccion[]): SeccionArbol[] => {

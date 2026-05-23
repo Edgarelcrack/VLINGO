@@ -145,8 +145,10 @@ export async function sendChatMessage(
   userId: string,
   message: string,
   sessionId?: string,
+  attachedContext?: string,
 ): Promise<ChatResponse> {
   const body: Record<string, unknown> = { userId, message };
   if (sessionId) body.sessionId = sessionId;
+  if (attachedContext) body.attachedContext = attachedContext;
   return post<ChatResponse>('/api/chat/message', body);
 }

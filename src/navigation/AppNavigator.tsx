@@ -20,6 +20,7 @@ import CrearCursoScreen       from '../screens/CrearCursoScreen';
 import EditorSeccionesScreen  from '../screens/EditorSeccionesScreen';
 import EditorPreguntasScreen  from '../screens/EditorPreguntasScreen';
 import EditorContenidoScreen  from '../screens/EditorContenidoScreen';
+import PlacementScreen        from '../screens/PlacementScreen';
 
 import { useAuth } from '../context/AuthContext';
 import { Colors } from '../theme';
@@ -176,25 +177,38 @@ function AppTabs() {
   );
 }
 
-function RootNavigator() {
-  const { session, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: Colors.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{
-          width: 64, height: 64, borderRadius: 32,
-          backgroundColor: Colors.accentBlue,
-          alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-        }}>
-          <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff' }}>V</Text>
-        </View>
-        <ActivityIndicator color={Colors.accentBlue} size="large" />
+function LoadingScreen() {
+  return (
+    <View style={{ flex: 1, backgroundColor: Colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{
+        width: 64, height: 64, borderRadius: 32,
+        backgroundColor: Colors.accentBlue,
+        alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+      }}>
+        <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff' }}>V</Text>
       </View>
-    );
-  }
+      <ActivityIndicator color={Colors.accentBlue} size="large" />
+    </View>
+  );
+}
 
-  return session ? <AppTabs /> : <AuthStack />;
+function RootNavigator() {
+  const { session, userProfile, loading } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+  if (!session) return <AuthStack />;
+
+  // Si hay sesión pero el perfil aún no se ha cargado, esperamos antes de
+  // decidir si mostrar el test o las tabs (evita un flash de AppTabs).
+  if (!userProfile) return <LoadingScreen />;
+
+  // Solo estudiantes con nivel === null deben hacer el test de nivelación.
+  // Profesores y administradores nunca entran aquí.
+  const needsPlacement =
+    userProfile.tipo === 'estudiante' && userProfile.nivel === null;
+  if (needsPlacement) return <PlacementScreen />;
+
+  return <AppTabs />;
 }
 
 export default function AppNavigator() {

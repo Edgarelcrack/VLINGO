@@ -42,20 +42,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Only create a fallback row when the row truly doesn't exist (PGRST116 = 0 rows from .single())
-    // Any other error (RLS, network, etc.) should not create a new row
-    const isNotFound = !error || error.includes('PGRST116') || error.includes('no rows');
+    const errLower = (error ?? '').toLowerCase();
+    const isNotFound =
+      !error
+      || errLower.includes('pgrst116')
+      || errLower.includes('no rows')
+      || errLower.includes('coerce')
+      || errLower.includes('json object');
+
     if (!isNotFound) {
       console.error('[AuthContext] fetchProfile error (not creating row):', error);
       return;
     }
 
-    await supabase.from('usuario').upsert(
-      { id: userId, nombre: 'Usuario', email: '', tipo: 'estudiante', fecha_registro: new Date().toISOString() },
-      { onConflict: 'id', ignoreDuplicates: true }
+    const { error: upsertErr } = await supabase.from('usuario').upsert(
+      {
+        id: userId,
+        nombre: 'Usuario',
+        email: '',
+        tipo: 'estudiante',
+        fecha_registro: new Date().toISOString(),
+      },
+      { onConflict: 'id', ignoreDuplicates: true },
     );
-    const { data: retry } = await getUserProfile(userId);
-    console.log('[AuthContext] fetchProfile retry →', retry);
+    if (upsertErr) {
+      console.error('[AuthContext] fallback upsert failed:', upsertErr.message);
+    }
+
+    const { data: retry, error: retryErr } = await getUserProfile(userId);
+    console.log('[AuthContext] fetchProfile retry →', { retry, retryErr });
     setUserProfile(retry);
   };
 
@@ -95,6 +110,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         { id: userId, nombre, email, tipo, nivel: nivelFinal, fecha_registro: new Date().toISOString() },
         { onConflict: 'id' }
       );
+    if (error) {
+      console.error('[AuthContext] crearRegistroUsuario upsert failed:', error.message);
+    }
     return error?.message ?? null;
   };
 
@@ -125,6 +143,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: { data: { full_name: name.trim() } },
       });
       if (error) return { error: error.message };
+      
+      if (data?.user && (data.user.identities?.length ?? 0) === 0) {
+        return { error: 'Este correo ya está registrado. Inicia sesión o usa otro.' };
+      }
 
       if (data?.user) {
         const upsertError = await crearRegistroUsuario(
@@ -149,14 +171,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (error) return { error: error.message };
 
+    if (data?.user && (data.user.identities?.length ?? 0) === 0) {
+      return { error: 'Este correo ya está registrado. Inicia sesión o usa otro.' };
+    }
+
     if (data?.user) {
-      await crearRegistroUsuario(
+      const upsertError = await crearRegistroUsuario(
         data.user.id,
         name.trim(),
         email.trim().toLowerCase(),
         'estudiante',
         nivel
       );
+      if (upsertError) {
+        return { error: 'Error creando perfil de usuario: ' + upsertError };
+      }
       await fetchProfile(data.user.id);
     }
     return { error: null };

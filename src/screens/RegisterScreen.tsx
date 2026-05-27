@@ -22,14 +22,11 @@ export default function RegisterScreen({ navigation }: any) {
   const [password, setPassword]     = useState('');
   const [confirm, setConfirm]       = useState('');
   const [tipo, setTipo]             = useState<TipoUsuario>('estudiante');
-  const [nivel, setNivel]           = useState('');
   const [codigo, setCodigo]         = useState('');
   const [loading, setLoading]       = useState(false);
   const [showPass, setShowPass]     = useState(false);
   const [showConf, setShowConf]     = useState(false);
   const [errors, setErrors]         = useState<Record<string, string>>({});
-
-  const NIVELES = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -40,9 +37,6 @@ export default function RegisterScreen({ navigation }: any) {
     else if (password.length < 6) e.password = 'Mínimo 6 caracteres';
     if (!confirm)       e.confirm = 'Confirma tu contraseña';
     else if (confirm !== password) e.confirm = 'Las contraseñas no coinciden';
-    if (tipo === 'estudiante' && !nivel) {
-      e.nivel = 'Selecciona tu nivel de inglés';
-    }
     if (tipo === 'profesor' && !codigo.trim()) {
       e.codigo = 'El código de invitación es requerido para profesores';
     }
@@ -53,7 +47,8 @@ export default function RegisterScreen({ navigation }: any) {
   const handleRegister = async () => {
     if (!validate()) return;
     setLoading(true);
-    const { error } = await signUp(email, password, name, tipo, codigo || undefined, nivel || undefined);
+    // El nivel del estudiante se asigna luego mediante el test de nivelación
+    const { error } = await signUp(email, password, name, tipo, codigo || undefined, undefined);
     setLoading(false);
     if (error) {
       Alert.alert('Error', error);
@@ -125,23 +120,14 @@ export default function RegisterScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
-            {/* Nivel — solo estudiante */}
             {tipo === 'estudiante' && (
-              <>
-                <Text style={s.label}>Nivel de inglés</Text>
-                <View style={s.nivelGrid}>
-                  {NIVELES.map(n => (
-                    <TouchableOpacity
-                      key={n}
-                      style={[s.nivelBtn, nivel === n && s.nivelBtnActive]}
-                      onPress={() => { setNivel(n); clear('nivel'); }}
-                    >
-                      <Text style={[s.nivelBtnTxt, nivel === n && s.nivelBtnTxtActive]}>{n}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                {errors.nivel ? <Text style={s.errorText}>{errors.nivel}</Text> : null}
-              </>
+              <View style={s.placementInfo}>
+                <Text style={s.placementInfoTitle}>Tu nivel de inglés</Text>
+                <Text style={s.placementInfoTxt}>
+                  Al iniciar sesión por primera vez te haremos un test corto para
+                  evaluar tu nivel y adaptar la experiencia.
+                </Text>
+              </View>
             )}
 
             {/* Nombre */}
@@ -347,14 +333,19 @@ const s = StyleSheet.create({
   switchText: { fontSize: 13, color: '#888' },
   switchLink: { fontSize: 13, color: NAVY, fontWeight: '700' },
 
-  nivelGrid:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  nivelBtn:        {
-    width: '30%', height: 42,
-    alignItems: 'center', justifyContent: 'center',
-    borderRadius: 10, borderWidth: 1.5, borderColor: '#E0E0E0',
-    backgroundColor: '#F8F8F8',
+  placementInfo: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(43,76,114,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(43,76,114,0.12)',
   },
-  nivelBtnActive:  { borderColor: NAVY, backgroundColor: 'rgba(43,76,114,0.07)' },
-  nivelBtnTxt:     { fontSize: 14, fontWeight: '700', color: '#999' },
-  nivelBtnTxtActive: { color: NAVY },
+  placementInfoTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: NAVY,
+    marginBottom: 4,
+  },
+  placementInfoTxt: { fontSize: 12, color: '#444', lineHeight: 17 },
 });

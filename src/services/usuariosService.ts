@@ -50,3 +50,14 @@ export const marcarCodigoUsado = async (codigoId: string): Promise<void> => {
     .update({ usado: true })
     .eq('id', codigoId);
 };
+
+export const actualizarNivel = async (
+  userId: string,
+  nivel: string,
+): Promise<{ error: string | null }> => {
+  const { error } = await supabase
+    .from('usuario')
+    .update({ nivel })
+    .eq('id', userId);
+  return { error: error?.message ?? null };
+};

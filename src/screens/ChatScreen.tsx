@@ -406,7 +406,7 @@ export default function ChatScreen() {
             activeOpacity={0.8}
             disabled={!inputEnabled}
           >
-            <Text style={{ color: '#fff', fontSize: 16 }}>➤</Text>
+            <Ionicons name="send" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

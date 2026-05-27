@@ -6,9 +6,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { getCursos } from '../services/cursosService';
+import {
+  getCursos,
+  getEstadisticasUsuario, EstadisticasUsuario,
+  getResumenSemanal, ResumenSemanal,
+} from '../services/cursosService';
 import { getTotalesApp, TotalesApp } from '../services/puntuacionService';
 import { Curso } from '../types';
+
+const DIA_LABEL = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
 
 const SKILL_CONFIG = [
   { key: 'listening', name: 'Listening', color: '#4CAF7D', icon: 'headset-outline'  as const },
@@ -21,6 +27,8 @@ export default function HomeScreen({ navigation }: any) {
   const { userProfile, user } = useAuth();
   const [cursos, setCursos]         = useState<Curso[]>([]);
   const [totales, setTotales]       = useState<TotalesApp | null>(null);
+  const [estadisticas, setEstadisticas] = useState<EstadisticasUsuario | null>(null);
+  const [resumen, setResumen]       = useState<ResumenSemanal | null>(null);
   const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -32,10 +40,17 @@ export default function HomeScreen({ navigation }: any) {
   const load = useCallback(async () => {
     if (!user) return;
     const tipo = userProfile?.tipo ?? 'estudiante';
-    const [{ data }, t] = await Promise.all([getCursos(tipo, user.id), getTotalesApp()]);
+    const [{ data }, t, est, res] = await Promise.all([
+      getCursos(tipo, user.id),
+      getTotalesApp(),
+      isProfesor ? Promise.resolve(null) : getEstadisticasUsuario(user.id),
+      isProfesor ? Promise.resolve(null) : getResumenSemanal(user.id),
+    ]);
     setCursos(data.slice(0, 4));
     setTotales(t);
-  }, [user, userProfile]);
+    setEstadisticas(est);
+    setResumen(res);
+  }, [user, userProfile, isProfesor]);
 
   useEffect(() => {
     load().finally(() => setLoading(false));
@@ -62,7 +77,7 @@ export default function HomeScreen({ navigation }: any) {
         <View style={s.header}>
           <View>
             <View style={s.dateRow}>
-              <Text style={s.dateIcon}>☁️</Text>
+              <Ionicons name="calendar-outline" size={12} color="#666" />
               <Text style={s.date}>{today}</Text>
             </View>
             <Text style={s.greet}>{`Buen día,\n${firstName}`}</Text>
@@ -140,18 +155,112 @@ export default function HomeScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* Continue button (for students only) */}
-        {!isProfesor && (
+        {/* Dashboard de actividad semanal (solo para estudiantes) */}
+        {!isProfesor && resumen && (
+          <View style={s.dashCard}>
+            <View style={s.dashHeader}>
+              <Ionicons name="flash" size={18} color="#B8860B" />
+              <Text style={s.dashTitle}>Tu semana</Text>
+            </View>
+
+            <View style={s.statsRow}>
+              <View style={s.statCell}>
+                <Text style={s.statNum}>{resumen.diasActivos}/7</Text>
+                <Text style={s.statLabel}>Días activos</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statCell}>
+                <Text style={s.statNum}>{resumen.leccionesSemana}</Text>
+                <Text style={s.statLabel}>Lecciones</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statCell}>
+                <Text style={[s.statNum, { color: '#B8860B' }]}>+{resumen.xpSemana}</Text>
+                <Text style={s.statLabel}>XP</Text>
+              </View>
+            </View>
+
+            <View style={s.chartRow}>
+              {resumen.actividadDiaria.map((d, i) => {
+                const max  = Math.max(1, ...resumen.actividadDiaria.map(x => x.cantidad));
+                const altura = d.cantidad > 0 ? Math.max(8, (d.cantidad / max) * 56) : 4;
+                const esHoy = i === resumen.actividadDiaria.length - 1;
+                const day = new Date(d.fecha + 'T00:00:00').getDay();
+                return (
+                  <View key={d.fecha} style={s.chartCol}>
+                    <View style={s.chartBarTrack}>
+                      <View
+                        style={[
+                          s.chartBarFill,
+                          { height: altura, backgroundColor: esHoy ? '#2B4C72' : '#B6C9DE' },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[s.chartLabel, esHoy && s.chartLabelHoy]}>
+                      {DIA_LABEL[day]}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Curso activo (CTA dinámico) — si hay uno en progreso */}
+        {!isProfesor && estadisticas?.cursoActivo && (
           <TouchableOpacity
-            style={s.continueCard}
+            style={s.activeCourseCard}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('LessonsTab', {
+              screen: 'Curso',
+              params: {
+                cursoId: estadisticas.cursoActivo!.cursoId,
+                titulo:  estadisticas.cursoActivo!.cursoTitulo,
+              },
+            })}
+          >
+            <View style={s.activeCourseLeft}>
+              <Text style={s.activeCourseLabel}>Continúa donde lo dejaste</Text>
+              <Text style={s.activeCourseTitle} numberOfLines={2}>
+                {estadisticas.cursoActivo.cursoTitulo}
+              </Text>
+              <View style={s.activeCourseBarTrack}>
+                <View
+                  style={[
+                    s.activeCourseBarFill,
+                    {
+                      width: estadisticas.cursoActivo.totalRaices > 0
+                        ? `${Math.round((estadisticas.cursoActivo.raicesCompletadas / estadisticas.cursoActivo.totalRaices) * 100)}%`
+                        : '0%',
+                    } as any,
+                  ]}
+                />
+              </View>
+              <Text style={s.activeCourseProgress}>
+                {estadisticas.cursoActivo.raicesCompletadas} de {estadisticas.cursoActivo.totalRaices} partes
+              </Text>
+            </View>
+            <View style={s.activeCoursePlayBtn}>
+              <Ionicons name="play" size={20} color="#fff" />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Si no hay curso activo, CTA para explorar */}
+        {!isProfesor && !estadisticas?.cursoActivo && (
+          <TouchableOpacity
+            style={s.exploreCard}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('LessonsTab', { screen: 'CursosList' })}
           >
-            <View style={s.continuePlayBtn}>
-              <Text style={{ color: '#fff', fontSize: 18 }}>▶</Text>
+            <View style={s.exploreIconWrap}>
+              <Ionicons name="compass-outline" size={22} color="#2B4C72" />
             </View>
-            <Text style={s.continueTitle}>Continuar{'\n'}Curso</Text>
-            <Text style={s.continueSub}>Ver todos los cursos</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.exploreTitle}>Empieza un curso</Text>
+              <Text style={s.exploreSub}>Explora el catálogo y elige uno</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
         )}
 
@@ -178,7 +287,7 @@ export default function HomeScreen({ navigation }: any) {
               })}
             >
               <View style={s.courseIcon}>
-                <Text style={{ fontSize: 18 }}></Text>
+                <Ionicons name="book-outline" size={18} color="#2B4C72" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.courseName} numberOfLines={1}>{c.titulo}</Text>
@@ -255,17 +364,80 @@ const s = StyleSheet.create({
   },
   actionTxt:  { fontSize: 12, fontWeight: '700', color: '#fff' },
 
-  continueCard: {
-    width: 160, backgroundColor: '#1E2A3A',
-    borderRadius: 16, padding: 18, marginBottom: 24,
+  dashCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  continuePlayBtn: {
-    width: 40, height: 40, borderRadius: 20,
+  dashHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  dashTitle:  { fontSize: 13, fontWeight: '800', color: '#111', textTransform: 'uppercase', letterSpacing: 0.6 },
+
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F7F8FA',
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 18,
+  },
+  statCell: { flex: 1, alignItems: 'center' },
+  statDivider: { width: 1, backgroundColor: '#E0E5EB', marginVertical: 4 },
+  statNum: { fontSize: 18, fontWeight: '800', color: '#111', marginBottom: 2 },
+  statLabel: { fontSize: 10, color: '#888', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+
+  chartRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  chartCol: { alignItems: 'center', flex: 1 },
+  chartBarTrack: {
+    width: '60%', height: 60,
+    backgroundColor: '#F0F1F3',
+    borderRadius: 6,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  chartBarFill: { width: '100%', borderRadius: 6 },
+  chartLabel: { fontSize: 11, fontWeight: '700', color: '#999', marginTop: 6 },
+  chartLabelHoy: { color: '#2B4C72' },
+
+  // Curso activo
+  activeCourseCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: '#1E2A3A',
+    borderRadius: 16, padding: 16, marginBottom: 20,
+  },
+  activeCourseLeft: { flex: 1 },
+  activeCourseLabel: { fontSize: 11, fontWeight: '700', color: '#8899AA', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 },
+  activeCourseTitle: { fontSize: 16, fontWeight: '800', color: '#fff', marginBottom: 10 },
+  activeCourseBarTrack: {
+    height: 6, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 100, overflow: 'hidden',
+    marginBottom: 6,
+  },
+  activeCourseBarFill: { height: 6, backgroundColor: '#FFD66A', borderRadius: 100 },
+  activeCourseProgress: { fontSize: 11, color: '#8899AA', fontWeight: '600' },
+  activeCoursePlayBtn: {
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#2E7D5E',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    alignItems: 'center', justifyContent: 'center',
   },
-  continueTitle: { fontSize: 18, fontWeight: '800', color: '#fff', lineHeight: 24, marginBottom: 8 },
-  continueSub:   { fontSize: 12, color: '#8899AA' },
+
+  exploreCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 14, padding: 16, marginBottom: 20,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  exploreIconWrap: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: 'rgba(43,76,114,0.10)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  exploreTitle: { fontSize: 14, fontWeight: '800', color: '#111', marginBottom: 2 },
+  exploreSub:   { fontSize: 12, color: '#888' },
 
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111', marginBottom: 12 },
   courseRow: {

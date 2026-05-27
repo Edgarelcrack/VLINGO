@@ -192,6 +192,63 @@ export const getEstadisticasUsuario = async (
   return { leccionesCompletadas, cursoActivo };
 };
 
+export type ResumenSemanal = {
+  diasActivos:      number;
+  leccionesSemana:  number;
+  xpSemana:         number;
+  actividadDiaria:  { fecha: string; cantidad: number }[];
+};
+
+export const getResumenSemanal = async (userId: string): Promise<ResumenSemanal> => {
+  const buckets: Record<string, number> = {};
+  const fechas: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
+    buckets[key] = 0;
+    fechas.push(key);
+  }
+
+  const desde = new Date();
+  desde.setDate(desde.getDate() - 6);
+  desde.setHours(0, 0, 0, 0);
+
+  const { data } = await supabase
+    .from('progreso_usuario')
+    .select('seccion_id, completado_en, estado')
+    .eq('usuario_id', userId)
+    .eq('estado', 'done')
+    .gte('completado_en', desde.toISOString());
+
+  const lst = (data as { seccion_id: string; completado_en: string | null }[] | null) ?? [];
+
+  const seccionIds = lst.map(p => p.seccion_id);
+  let leccionIds = new Set<string>();
+  if (seccionIds.length > 0) {
+    const { data: secs } = await supabase
+      .from('seccion')
+      .select('id, tipo')
+      .in('id', seccionIds);
+    const lstSecs = (secs as { id: string; tipo: string }[] | null) ?? [];
+    leccionIds = new Set(lstSecs.filter(s => s.tipo === 'leccion').map(s => s.id));
+  }
+
+  lst.forEach(p => {
+    if (!p.completado_en || !leccionIds.has(p.seccion_id)) return;
+    const dia = p.completado_en.slice(0, 10);
+    if (dia in buckets) buckets[dia]++;
+  });
+
+  const actividadDiaria = fechas.map(f => ({ fecha: f, cantidad: buckets[f] }));
+  const leccionesSemana = actividadDiaria.reduce((s, d) => s + d.cantidad, 0);
+  const diasActivos     = actividadDiaria.filter(d => d.cantidad > 0).length;
+  const xpSemana        = leccionesSemana * XP_POR_SECCION;
+
+  return { diasActivos, leccionesSemana, xpSemana, actividadDiaria };
+};
+
 export const moverSeccion = async (
   id: string,
   direccion: 'arriba' | 'abajo'

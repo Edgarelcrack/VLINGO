@@ -13,42 +13,42 @@ export const getUserProfile = async (userId: string): Promise<{ data: UserProfil
 export const validarCodigoInvitacion = async (
   codigo: string,
   tipo: string
-): Promise<{ valido: boolean; codigoId: string | null }> => {
-
-  const codigoNormalizado = codigo.trim();
-  const tipoNormalizado = tipo.trim();
-
-  const { data, error } = await supabase
-    .from('codigo_invitacion')
-    .select('*')
-    .eq('codigo', codigoNormalizado)
-    .eq('tipo_destino', tipoNormalizado)
-    .eq('usado', false);
-
-  console.log("DEBUG VALIDACION:", {
-    codigoNormalizado,
-    tipoNormalizado,
-    data,
-    error
+): Promise<{ valido: boolean }> => {
+  const { data, error } = await supabase.rpc('validar_codigo_invitacion', {
+    p_codigo: codigo.trim(),
+    p_tipo: tipo.trim(),
   });
-
   if (error) {
-    console.log("ERROR REAL:", error);
-    return { valido: false, codigoId: null };
+    console.warn('[validarCodigoInvitacion] error:', error.message);
+    return { valido: false };
   }
-
-  if (!data || data.length === 0) {
-    return { valido: false, codigoId: null };
-  }
-
-  return { valido: true, codigoId: data[0].id };
+  return { valido: data === true };
 };
 
-export const marcarCodigoUsado = async (codigoId: string): Promise<void> => {
-  await supabase
-    .from('codigo_invitacion')
-    .update({ usado: true })
-    .eq('id', codigoId);
+export const consumirCodigoInvitacion = async (
+  codigo: string,
+  tipo: string
+): Promise<{ consumido: boolean }> => {
+  const { data, error } = await supabase.rpc('consumir_codigo_invitacion', {
+    p_codigo: codigo.trim(),
+    p_tipo: tipo.trim(),
+  });
+  if (error) {
+    console.warn('[consumirCodigoInvitacion] error:', error.message);
+    return { consumido: false };
+  }
+  return { consumido: data === true };
+};
+
+export const ascenderAProfesor = async (
+  codigo: string
+): Promise<{ ok: boolean; error: string | null }> => {
+  const { data, error } = await supabase.rpc('ascender_a_profesor', {
+    p_codigo: codigo.trim(),
+  });
+  if (error) return { ok: false, error: error.message };
+  if (data !== true) return { ok: false, error: 'Código inválido o ya utilizado' };
+  return { ok: true, error: null };
 };
 
 export const actualizarNivel = async (

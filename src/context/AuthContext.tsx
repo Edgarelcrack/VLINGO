@@ -3,7 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { UserProfile, TipoUsuario } from '../types';
-import { getUserProfile, validarCodigoInvitacion, marcarCodigoUsado } from '../services/usuariosService';
+import {
+  getUserProfile,
+  validarCodigoInvitacion,
+  consumirCodigoInvitacion,
+  ascenderAProfesor,
+} from '../services/usuariosService';
 
 type AuthContextType = {
   session: Session | null;
@@ -132,8 +137,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!codigoInvitacion?.trim()) {
         return { error: 'Los profesores necesitan un código de invitación' };
       }
-      const { valido, codigoId } = await validarCodigoInvitacion(codigoInvitacion, 'profesor');
-      if (!valido || !codigoId) {
+      const { valido } = await validarCodigoInvitacion(codigoInvitacion, 'profesor');
+      if (!valido) {
         return { error: 'Código de invitación inválido o ya utilizado' };
       }
 
@@ -143,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: { data: { full_name: name.trim() } },
       });
       if (error) return { error: error.message };
-      
+
       if (data?.user && (data.user.identities?.length ?? 0) === 0) {
         return { error: 'Este correo ya está registrado. Inicia sesión o usa otro.' };
       }
@@ -157,7 +162,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           nivel
         );
         if (upsertError) return { error: 'Error asignando rol de profesor: ' + upsertError };
-        await marcarCodigoUsado(codigoId);
+
+        const { consumido } = await consumirCodigoInvitacion(codigoInvitacion, 'profesor');
+        if (!consumido) {
+          return { error: 'El código fue utilizado por otro usuario antes de completar el registro' };
+        }
         await fetchProfile(data.user.id);
       }
       return { error: null };
@@ -224,14 +233,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const reclamarProfesor = async (codigoInvitacion: string) => {
     if (!user) return { error: 'No hay sesión activa' };
-    const { valido, codigoId } = await validarCodigoInvitacion(codigoInvitacion.trim(), 'profesor');
-    if (!valido || !codigoId) return { error: 'Código de invitación inválido o ya utilizado' };
-    const { error } = await supabase
-      .from('usuario')
-      .update({ tipo: 'profesor' })
-      .eq('id', user.id);
-    if (error) return { error: error.message };
-    await marcarCodigoUsado(codigoId);
+    const { ok, error } = await ascenderAProfesor(codigoInvitacion);
+    if (!ok) return { error: error ?? 'No se pudo ascender a profesor' };
     await fetchProfile(user.id);
     return { error: null };
   };

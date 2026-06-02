@@ -152,3 +152,23 @@ export async function sendChatMessage(
   if (attachedContext) body.attachedContext = attachedContext;
   return post<ChatResponse>('/api/chat/message', body);
 }
+
+export type EvaluationResult = {
+  score: number;
+  grammar_errors: string[];
+  corrections: string[];
+  positive: string;
+  tip: string;
+};
+
+export async function evaluateText(
+  userId: string,
+  text: string,
+  exerciseContext?: string,
+): Promise<EvaluationResult> {
+  return post<EvaluationResult>('/api/chat/evaluate', {
+    userId,
+    text,
+    exerciseContext: exerciseContext ?? 'Free writing in chat',
+  });
+}

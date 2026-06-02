@@ -12,6 +12,8 @@ import {
   ensureVlingoUser,
   fetchChatHistory,
   sendChatMessage,
+  evaluateText,
+  EvaluationResult,
   getSavedSessionId,
   saveSessionId,
   clearSessionId,
@@ -25,8 +27,30 @@ type ChatScreenParams = {
   fresh?: boolean;    // Iniciar conversación nueva
 };
 
-type MsgType = 'bot' | 'user' | 'error';
-type Msg = { id: number; type: MsgType; text: string };
+type MsgType = 'bot' | 'user' | 'error' | 'eval';
+type Msg = {
+  id: number;
+  type: MsgType;
+  text: string;
+  evaluation?: EvaluationResult;
+  evalOriginal?: string;
+};
+
+// Diff aproximado: marca como erradas las palabras del original que no aparecen
+// (normalizadas) en la corrección sugerida. Suficiente para resaltar visualmente.
+function diffWords(original: string, corrected: string): { word: string; wrong: boolean }[] {
+  const normalize = (w: string) => w.toLowerCase().replace(/[^\w']/g, '');
+  const correctedSet = new Set(
+    corrected.split(/\s+/).map(normalize).filter(w => w.length > 0)
+  );
+  const tokens = original.split(/(\s+)/);
+  return tokens.map(token => {
+    if (/^\s+$/.test(token) || token === '') return { word: token, wrong: false };
+    const cleaned = normalize(token);
+    if (!cleaned) return { word: token, wrong: false };
+    return { word: token, wrong: !correctedSet.has(cleaned) };
+  });
+}
 
 const WELCOME: Msg = {
   id: 0,
@@ -61,6 +85,9 @@ export default function ChatScreen() {
 
   const [apiUserId, setApiUserId] = useState<string | null>(null);
   const sessionIdRef              = useRef<string | undefined>(undefined);
+
+  const [attachMenuOpen, setAttachMenuOpen]   = useState(false);
+  const [evaluationMode, setEvaluationMode]   = useState(false);
 
   const [cursePickerOpen, setCursePickerOpen] = useState(false);
   const [cursos, setCursos]                   = useState<Curso[]>([]);
@@ -190,9 +217,55 @@ export default function ChatScreen() {
     attachedContextRef.current = null;
   };
 
+  const onPickCursoFromMenu = () => {
+    setAttachMenuOpen(false);
+    setEvaluationMode(false);
+    openCursePicker();
+  };
+
+  const onPickEvaluationFromMenu = () => {
+    setAttachMenuOpen(false);
+    clearAttached();
+    setEvaluationMode(true);
+  };
+
   const send = async () => {
     const text = input.trim();
     if (!text || sending || status !== 'ready' || !apiUserId) return;
+
+    // Modulo de evaluacion.
+    if (evaluationMode) {
+      setInput('');
+      setSending(true);
+      scrollToEnd();
+      try {
+        const result = await evaluateText(apiUserId, text);
+        setMsgs(prev => [
+          ...prev,
+          {
+            id: Date.now(),
+            type: 'eval',
+            text: '',
+            evaluation: result,
+            evalOriginal: text,
+          },
+        ]);
+      } catch (err: any) {
+        setMsgs(prev => [
+          ...prev,
+          {
+            id: Date.now(),
+            type: 'error',
+            text: err.message ?? 'Error al evaluar.',
+          },
+        ]);
+      } finally {
+        setEvaluationMode(false);
+        setSending(false);
+        scrollToEnd();
+      }
+      return;
+    }
 
     setInput('');
     const userMsg: Msg = { id: Date.now(), type: 'user', text };
@@ -318,35 +391,46 @@ export default function ChatScreen() {
           )}
 
           {/* ── Mensajes ── */}
-          {status === 'ready' && msgs.map(m => (
-            <View key={m.id} style={m.type === 'user' ? s.rowRight : s.rowLeft}>
-              <View
-                style={[
-                  s.bubble,
-                  m.type === 'user'   ? s.bubbleUser  :
-                  m.type === 'error'  ? s.bubbleError :
-                  s.bubbleBot,
-                ]}
-              >
-                <Text
+          {status === 'ready' && msgs.map(m => {
+            if (m.type === 'eval' && m.evaluation && m.evalOriginal !== undefined) {
+              return (
+                <View key={m.id} style={s.rowLeft}>
+                  <EvaluationBubble original={m.evalOriginal} result={m.evaluation} />
+                </View>
+              );
+            }
+            return (
+              <View key={m.id} style={m.type === 'user' ? s.rowRight : s.rowLeft}>
+                <View
                   style={[
-                    s.bubbleText,
-                    m.type === 'user'  && s.bubbleTextUser,
-                    m.type === 'error' && s.bubbleTextError,
+                    s.bubble,
+                    m.type === 'user'   ? s.bubbleUser  :
+                    m.type === 'error'  ? s.bubbleError :
+                    s.bubbleBot,
                   ]}
                 >
-                  {m.text}
-                </Text>
+                  <Text
+                    style={[
+                      s.bubbleText,
+                      m.type === 'user'  && s.bubbleTextUser,
+                      m.type === 'error' && s.bubbleTextError,
+                    ]}
+                  >
+                    {m.text}
+                  </Text>
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
 
           {/* ── Indicador de escritura ── */}
           {sending && (
             <View style={s.rowLeft}>
               <View style={[s.bubble, s.bubbleBot, s.typingBubble]}>
                 <ActivityIndicator size="small" color="#2B4C72" />
-                <Text style={s.typingText}>Escribiendo...</Text>
+                <Text style={s.typingText}>
+                  {evaluationMode ? 'Evaluando...' : 'Escribiendo...'}
+                </Text>
               </View>
             </View>
           )}
@@ -375,16 +459,31 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {/* ── Modo evaluación activo ── */}
+        {evaluationMode && (
+          <View style={s.attachedChipWrap}>
+            <View style={[s.attachedChip, s.evalChip]}>
+              <Ionicons name="checkmark-circle" size={14} color="#2E7D52" />
+              <Text style={[s.attachedChipText, { color: '#2E7D52' }]} numberOfLines={1}>
+                Modo evaluación · escribe en inglés
+              </Text>
+              <TouchableOpacity onPress={() => setEvaluationMode(false)} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color="#2E7D52" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* ── Barra de entrada ── */}
         <View style={s.inputBar}>
           <TouchableOpacity
             style={s.cursoBtn}
-            onPress={openCursePicker}
+            onPress={() => setAttachMenuOpen(true)}
             activeOpacity={0.7}
             disabled={!inputEnabled}
           >
             <Ionicons
-              name="book-outline"
+              name="attach"
               size={22}
               color={inputEnabled ? '#2B4C72' : '#B0BEC5'}
             />
@@ -410,6 +509,50 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* ── Menú adjuntar (citar curso / pedir evaluación) ── */}
+      <Modal
+        visible={attachMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAttachMenuOpen(false)}
+      >
+        <TouchableOpacity
+          style={s.menuBackdrop}
+          activeOpacity={1}
+          onPress={() => setAttachMenuOpen(false)}
+        >
+          <View style={s.menuSheet}>
+            <TouchableOpacity
+              style={s.menuItem}
+              activeOpacity={0.7}
+              onPress={onPickCursoFromMenu}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: 'rgba(43,76,114,0.10)' }]}>
+                <Ionicons name="book" size={20} color="#2B4C72" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.menuItemTitle}>Citar curso</Text>
+                <Text style={s.menuItemSub}>La IA explicará un curso específico</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={s.menuDivider} />
+            <TouchableOpacity
+              style={s.menuItem}
+              activeOpacity={0.7}
+              onPress={onPickEvaluationFromMenu}
+            >
+              <View style={[s.menuIconWrap, { backgroundColor: 'rgba(46,125,82,0.10)' }]}>
+                <Ionicons name="checkmark-circle" size={20} color="#2E7D52" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.menuItemTitle}>Pedir evaluación</Text>
+                <Text style={s.menuItemSub}>Escribe en inglés y recibe correcciones</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* ── Seleccionar curso a citar ── */}
       <Modal
@@ -479,6 +622,72 @@ export default function ChatScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+/* ── Burbuja de evaluación ───────────────────────────────────────── */
+function EvaluationBubble({
+  original,
+  result,
+}: {
+  original: string;
+  result: EvaluationResult;
+}) {
+  const corrected = result.corrections?.[0] ?? '';
+  const tokens = corrected ? diffWords(original, corrected) : [{ word: original, wrong: false }];
+
+  const scoreColor =
+    result.score >= 80 ? '#2E7D52' :
+    result.score >= 60 ? '#B8860B' :
+    '#E05A4E';
+
+  return (
+    <View style={s.evalBubble}>
+      <View style={s.evalHeader}>
+        <View style={s.evalIconWrap}>
+          <Ionicons name="checkmark-circle" size={14} color="#2B4C72" />
+        </View>
+        <Text style={s.evalTitle}>Evaluación</Text>
+        <View style={[s.scorePill, { backgroundColor: scoreColor + '20' }]}>
+          <Text style={[s.scoreTxt, { color: scoreColor }]}>{result.score}/100</Text>
+        </View>
+      </View>
+
+      {/* Frase original con palabras erradas en rojo */}
+      <Text style={s.evalSectionLabel}>Tu frase:</Text>
+      <Text style={s.evalOriginalText}>
+        {tokens.map((t, i) => (
+          <Text key={i} style={t.wrong ? s.wordWrong : undefined}>
+            {t.word}
+          </Text>
+        ))}
+      </Text>
+
+      <View style={s.evalDivider} />
+
+      {/* Corrección sugerida */}
+      {corrected ? (
+        <>
+          <Text style={s.evalSectionLabel}>Corrección:</Text>
+          <Text style={s.evalCorrectedText}>{corrected}</Text>
+          <View style={s.evalDivider} />
+        </>
+      ) : null}
+
+      {/* Feedback positivo + tip */}
+      {result.positive ? (
+        <View style={s.evalFeedbackRow}>
+          <Ionicons name="thumbs-up" size={13} color="#2E7D52" />
+          <Text style={s.evalPositiveTxt}>{result.positive}</Text>
+        </View>
+      ) : null}
+      {result.tip ? (
+        <View style={s.evalFeedbackRow}>
+          <Ionicons name="bulb" size={13} color="#B8860B" />
+          <Text style={s.evalTipTxt}>{result.tip}</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -682,4 +891,141 @@ const s = StyleSheet.create({
   },
   cursoTitulo: { fontSize: 14, fontWeight: '600', color: '#111' },
   cursoNivel:  { fontSize: 12, color: '#666', marginTop: 2 },
+
+  evalChip: {
+    backgroundColor: 'rgba(46,125,82,0.10)',
+  },
+
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.40)',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 16,
+    paddingBottom: 90,
+  },
+  menuSheet: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  menuIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuItemTitle: { fontSize: 14, fontWeight: '700', color: '#111' },
+  menuItemSub:   { fontSize: 12, color: '#888', marginTop: 2 },
+  menuDivider:   { height: 1, backgroundColor: '#F0F0F0', marginHorizontal: 14 },
+
+  // ── Burbuja de evaluación ──────────────────────────────────────
+  // Ancho fijo (no maxWidth) para que las tres secciones tengan espacio
+  // suficiente aunque la frase del usuario sea muy corta.
+  evalBubble: {
+    width: '92%',
+    alignSelf: 'flex-start',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderTopLeftRadius: 4,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(43,76,114,0.18)',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  evalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  evalIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: 'rgba(43,76,114,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  evalTitle: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#2B4C72',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  scorePill: {
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  scoreTxt: { fontSize: 12, fontWeight: '800' },
+
+  evalSectionLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  evalOriginalText: {
+    fontSize: 14,
+    color: '#222',
+    lineHeight: 20,
+  },
+  wordWrong: {
+    color: '#E05A4E',
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted',
+    textDecorationColor: '#E05A4E',
+  },
+  evalCorrectedText: {
+    fontSize: 14,
+    color: '#2E7D52',
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  evalDivider: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+    marginVertical: 10,
+  },
+  evalFeedbackRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 6,
+  },
+  evalPositiveTxt: {
+    flex: 1,
+    fontSize: 12,
+    color: '#2E7D52',
+    lineHeight: 17,
+  },
+  evalTipTxt: {
+    flex: 1,
+    fontSize: 12,
+    color: '#555',
+    lineHeight: 17,
+    fontStyle: 'italic',
+  },
 });

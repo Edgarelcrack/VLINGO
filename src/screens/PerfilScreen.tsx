@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { getEstadisticasUsuario, EstadisticasUsuario } from '../services/cursosService';
+import { getStreak } from '../services/storageService';
 
 const NAVY     = '#2B4C72';
 const NAVY_DK  = '#1E2D3D';
@@ -71,12 +72,14 @@ export default function PerfilScreen({ navigation }: any) {
   const [codigo, setCodigo]             = useState('');
   const [claiming, setClaiming]         = useState(false);
   const [stats, setStats]               = useState<EstadisticasUsuario>({ leccionesCompletadas: 0, cursoActivo: null });
+  const [streak, setStreak]             = useState(0);
   const [refreshing, setRefreshing]     = useState(false);
 
   const cargar = useCallback(async () => {
     if (!user) return;
-    const data = await getEstadisticasUsuario(user.id);
+    const [data, s] = await Promise.all([getEstadisticasUsuario(user.id), getStreak()]);
     setStats(data);
+    setStreak(s);
   }, [user]);
 
   useFocusEffect(useCallback(() => { cargar(); }, [cargar]));
@@ -129,10 +132,6 @@ export default function PerfilScreen({ navigation }: any) {
 
   const xp        = userProfile?.xp_total ?? 0;
   const lecciones = stats.leccionesCompletadas;
-  const fechaReg  = userProfile?.fecha_registro;
-  const dias = fechaReg
-    ? Math.max(1, Math.floor((Date.now() - new Date(fechaReg).getTime()) / 86_400_000) + 1)
-    : 1;
 
   const logros        = buildLogros(xp, lecciones);
   const logrosGanados = logros.filter(l => l.earned).length;
@@ -197,11 +196,11 @@ export default function PerfilScreen({ navigation }: any) {
               label="Lecciones"
             />
             <StatCard
-              icon="calendar"
-              iconColor={NAVY}
-              iconBg="rgba(43,76,114,0.12)"
-              value={`${dias}`}
-              label={dias === 1 ? 'Día' : 'Días'}
+              icon="flame"
+              iconColor="#E05A4E"
+              iconBg="rgba(224,90,78,0.12)"
+              value={`${streak}`}
+              label={streak === 1 ? 'Día racha' : 'Días racha'}
             />
           </View>
         </FadeInView>

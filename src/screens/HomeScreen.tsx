@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, ActivityIndicator, RefreshControl,
@@ -12,6 +13,7 @@ import {
   getResumenSemanal, ResumenSemanal,
 } from '../services/cursosService';
 import { getTotalesApp, TotalesApp } from '../services/puntuacionService';
+import { trackDailyUsage } from '../services/storageService';
 import { Curso } from '../types';
 
 const DIA_LABEL = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
@@ -39,6 +41,7 @@ export default function HomeScreen({ navigation }: any) {
 
   const load = useCallback(async () => {
     if (!user) return;
+    trackDailyUsage();
     const tipo = userProfile?.tipo ?? 'estudiante';
     const [{ data }, t, est, res] = await Promise.all([
       getCursos(tipo, user.id),
@@ -52,9 +55,9 @@ export default function HomeScreen({ navigation }: any) {
     setResumen(res);
   }, [user, userProfile, isProfesor]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     load().finally(() => setLoading(false));
-  }, [load]);
+  }, [load]));
 
   const onRefresh = async () => {
     setRefreshing(true);

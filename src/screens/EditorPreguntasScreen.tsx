@@ -10,6 +10,7 @@ import {
   getPreguntasPorSeccion, crearPregunta, actualizarPregunta,
   eliminarPregunta, MAX_PREGUNTAS_POR_SECCION,
 } from '../services/preguntasService';
+import { pickAndUploadAudio } from '../services/storageService';
 import { Pregunta, TipoPregunta } from '../types';
 
 const NAVY = '#2B4C72';
@@ -253,6 +254,7 @@ function PreguntaModal({
   const [correcta, setCorrecta]                   = useState(0);
   const [transcripcionEsperada, setTranscripcion] = useState('');
   const [audioUrl, setAudioUrl]                   = useState('');
+  const [uploadingAudio, setUploadingAudio]       = useState(false);
   const [guardando, setGuardando]                 = useState(false);
 
   useEffect(() => {
@@ -282,6 +284,17 @@ function PreguntaModal({
 
   const setOpcion = (idx: number, valor: string) => {
     setOpciones(prev => prev.map((o, i) => i === idx ? valor : o));
+  };
+
+  const handlePickAudio = async () => {
+    setUploadingAudio(true);
+    const { url, error } = await pickAndUploadAudio();
+    setUploadingAudio(false);
+    if (error) {
+      Alert.alert('Error al subir audio', error);
+      return;
+    }
+    if (url) setAudioUrl(url);
   };
 
   const valido =
@@ -379,16 +392,35 @@ function PreguntaModal({
               </>
             ) : tipo === 'listening' ? (
               <>
-                <Text style={m.label}>URL del audio</Text>
-                <TextInput
-                  style={m.input}
-                  value={audioUrl}
-                  onChangeText={setAudioUrl}
-                  placeholder="https://... (mp3, m4a, wav)"
-                  placeholderTextColor="#BBB"
-                  autoCapitalize="none"
-                  keyboardType="url"
-                />
+                <Text style={m.label}>Archivo de audio</Text>
+                <TouchableOpacity
+                  style={[m.audioBtn, audioUrl ? m.audioBtnDone : null]}
+                  onPress={handlePickAudio}
+                  disabled={uploadingAudio}
+                  activeOpacity={0.8}
+                >
+                  {uploadingAudio ? (
+                    <>
+                      <ActivityIndicator size="small" color={NAVY} />
+                      <Text style={m.audioBtnTxt}>Subiendo audio...</Text>
+                    </>
+                  ) : audioUrl ? (
+                    <>
+                      <Ionicons name="checkmark-circle" size={18} color="#2E7D52" />
+                      <Text style={[m.audioBtnTxt, { color: '#2E7D52', flex: 1 }]} numberOfLines={1}>
+                        Audio subido
+                      </Text>
+                      <TouchableOpacity onPress={() => setAudioUrl('')}>
+                        <Ionicons name="close-circle-outline" size={18} color="#999" />
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="cloud-upload-outline" size={18} color={NAVY} />
+                      <Text style={m.audioBtnTxt}>Seleccionar audio (mp3, m4a, wav)</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
                 <Text style={m.label}>Respuesta esperada del estudiante</Text>
                 <TextInput
                   style={[m.input, m.inputMulti]}
@@ -593,4 +625,15 @@ const m = StyleSheet.create({
     borderRadius: 10, backgroundColor: NAVY,
   },
   btnSaveTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
+
+  audioBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: 'rgba(43,76,114,0.07)', borderRadius: 10,
+    borderWidth: 1, borderColor: '#D0D8E4', borderStyle: 'dashed',
+    paddingHorizontal: 14, paddingVertical: 14, marginBottom: 12,
+  },
+  audioBtnDone: {
+    backgroundColor: 'rgba(46,125,82,0.07)', borderColor: '#2E7D52', borderStyle: 'solid',
+  },
+  audioBtnTxt: { fontSize: 13, color: NAVY, fontWeight: '600' },
 });

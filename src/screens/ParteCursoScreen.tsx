@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
 import {
   View, Text, ScrollView, TouchableOpacity, Animated, Easing,
   StyleSheet, ActivityIndicator, ToastAndroid, Platform, Alert,
@@ -104,9 +106,20 @@ export default function ParteCursoScreen({ navigation, route }: any) {
   const [preguntasMap, setPreguntasMap] = useState<Record<string, Pregunta[]>>({});
   const [loading, setLoading]           = useState(true);
   const [open, setOpen]                 = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const celebrationScale   = useRef(new Animated.Value(0)).current;
+  const celebrationOpacity = useRef(new Animated.Value(0)).current;
+  const goBackTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
-    if (!cursoId || !user) return;
+    if (!cursoId || !user) {
+      setLoading(false);
+      return;
+    }
+
+    setOpen(null);
+    setHijos([]);
+    setPreguntasMap({});
 
     const { data: todasSecciones } = await getSecciones(cursoId);
     const actual = todasSecciones.find(s => s.id === seccionId) ?? null;
@@ -116,7 +129,19 @@ export default function ParteCursoScreen({ navigation, route }: any) {
     const progresoMap: Record<string, EstadoSeccion> = {};
     (progreso as ProgresoUsuario[]).forEach(p => { progresoMap[p.seccion_id] = p.estado; });
 
-    const estadoActual = progresoMap[seccionId] ?? 'locked';
+    // Inferir estado si no hay registro: desbloquear si todas las secciones raíz anteriores están completas
+    let estadoActual: EstadoSeccion = progresoMap[seccionId] ?? 'locked';
+    if (estadoActual === 'locked') {
+      const raices = todasSecciones
+        .filter(s => s.parent_id === null)
+        .sort((a, b) => a.orden - b.orden);
+      const idx = raices.findIndex(s => s.id === seccionId);
+      if (idx > 0 && raices.slice(0, idx).every(s => progresoMap[s.id] === 'done')) {
+        estadoActual = 'active';
+      } else if (idx === 0) {
+        estadoActual = 'active';
+      }
+    }
     setSeccionEstado(estadoActual);
 
     const children = todasSecciones
@@ -133,10 +158,12 @@ export default function ParteCursoScreen({ navigation, route }: any) {
         progresoMap[children[0].id] = 'active';
       }
 
-      const conEstado: SeccionConEstado[] = children.map(s => ({
-        ...s,
-        estado: progresoMap[s.id] ?? 'locked',
-      }));
+      const conEstado: SeccionConEstado[] = children.map((s, i) => {
+        const estadoBD = progresoMap[s.id];
+        if (estadoBD) return { ...s, estado: estadoBD };
+        const anterioresCompletas = children.slice(0, i).every(prev => progresoMap[prev.id] === 'done');
+        return { ...s, estado: anterioresCompletas ? 'active' : 'locked' };
+      });
       setHijos(conEstado);
       const firstActive = conEstado.find(s => s.estado === 'active');
       const firstDone   = conEstado.find(s => s.estado === 'done');
@@ -161,22 +188,55 @@ export default function ParteCursoScreen({ navigation, route }: any) {
     }
   }, [seccionId, cursoId, user]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     load().finally(() => setLoading(false));
-  }, [load]);
+  }, [load]));
 
   const marcarCompletado = async (secId: string) => {
     if (!user) return;
+
+    // Verificar antes de completar si esta es la última lección pendiente
+    const eraUltima = hijos.length > 0 &&
+      hijos.filter(h => h.id !== secId).every(h => h.estado === 'done');
+
     const { xpGanado } = await marcarCompletadaYAvanzar(user.id, secId);
     notificarXP(xpGanado);
     await refreshProfile();
-    load();
+    await load();
+
+    if (eraUltima) {
+      setShowCelebration(true);
+      celebrationScale.setValue(0);
+      celebrationOpacity.setValue(0);
+      Animated.parallel([
+        Animated.spring(celebrationScale,   { toValue: 1, useNativeDriver: true, bounciness: 14 }),
+        Animated.timing(celebrationOpacity, { toValue: 1, duration: 250, useNativeDriver: true }),
+      ]).start();
+      goBackTimerRef.current = setTimeout(() => {
+        setShowCelebration(false);
+        navigation.goBack();
+      }, 2000);
+    }
   };
+
+  useEffect(() => {
+    return () => {
+      if (goBackTimerRef.current) clearTimeout(goBackTimerRef.current);
+    };
+  }, []);
 
   if (loading) {
     return (
       <View style={s.center}>
         <ActivityIndicator size="large" color="#2B4C72" />
+      </View>
+    );
+  }
+
+  if (!seccionId || !cursoId) {
+    return (
+      <View style={s.center}>
+        <Text style={{ color: '#999', fontSize: 14 }}>No se encontró esta sección.</Text>
       </View>
     );
   }
@@ -336,6 +396,16 @@ export default function ParteCursoScreen({ navigation, route }: any) {
 
           <ChatShortcut navigation={navigation} />
         </ScrollView>
+
+        {showCelebration && (
+          <Animated.View style={[s.celebrationOverlay, { opacity: celebrationOpacity }]}>
+            <Animated.View style={[s.celebrationCard, { transform: [{ scale: celebrationScale }] }]}>
+              <Text style={s.celebrationEmoji}>🏆</Text>
+              <Text style={s.celebrationTitle}>¡Sección completada!</Text>
+              <Text style={s.celebrationSub}>Continuando con la siguiente...</Text>
+            </Animated.View>
+          </Animated.View>
+        )}
       </SafeAreaView>
     );
   }
@@ -505,6 +575,15 @@ function PronunciacionCard({
   const doneRef     = useRef(saved?.resultado != null);
   const onResultRef = useRef(onResult);
   useEffect(() => { onResultRef.current = onResult; }, [onResult]);
+  useEffect(() => { doneRef.current = resultado !== null; }, [resultado]);
+  useEffect(() => {
+    return () => {
+      if (SpeechModule && listeningRef.current) {
+        listeningRef.current = false;
+        SpeechModule.stop();
+      }
+    };
+  }, []);
 
   const esperado = pregunta.opciones[0] ?? '';
   const esperadoRef = useRef(esperado);
@@ -531,6 +610,11 @@ function PronunciacionCard({
         doneRef.current = true;
         const res = compareTexts(texto, esperadoRef.current);
         expandPreset();
+        Haptics.notificationAsync(
+          res === 'correct'
+            ? Haptics.NotificationFeedbackType.Success
+            : Haptics.NotificationFeedbackType.Warning
+        );
         setResultado(res);
         onResultRef.current({ transcripcion: texto, resultado: res });
       }
@@ -658,6 +742,11 @@ function CompletarFraseCard({
     Keyboard.dismiss();
     const res = compareTexts(respuesta.trim(), esperado);
     expandPreset();
+    Haptics.notificationAsync(
+      res === 'correct'
+        ? Haptics.NotificationFeedbackType.Success
+        : Haptics.NotificationFeedbackType.Error
+    );
     setResultado(res);
     onResult({ respuesta: respuesta.trim(), resultado: res });
   };
@@ -745,9 +834,15 @@ function ListeningCard({
   const [isLoading, setIsLoading]   = useState(false);
   const [respuesta, setRespuesta]   = useState(saved?.respuesta ?? '');
   const [resultado, setResultado]   = useState<ListenResultado['resultado'] | null>(saved?.resultado ?? null);
+  const isMountedRef                = useRef(true);
 
   useEffect(() => {
-    return () => { sound?.unloadAsync(); };
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      sound?.setOnPlaybackStatusUpdate(null);
+      sound?.unloadAsync();
+    };
   }, [sound]);
 
   const toggleAudio = async () => {
@@ -773,7 +868,10 @@ function ListeningCard({
       setSound(newSound);
       setIsPlaying(true);
       newSound.setOnPlaybackStatusUpdate(status => {
-        if (status.isLoaded && status.didJustFinish) setIsPlaying(false);
+        if (status.isLoaded && status.didJustFinish) {
+          if (isMountedRef.current) setIsPlaying(false);
+          newSound.stopAsync();
+        }
       });
     } catch {
       Alert.alert('Error', 'No se pudo cargar el audio. Verifica la URL.');
@@ -787,6 +885,11 @@ function ListeningCard({
     Keyboard.dismiss();
     const res = compareTexts(respuesta.trim(), esperado);
     expandPreset();
+    Haptics.notificationAsync(
+      res === 'correct'
+        ? Haptics.NotificationFeedbackType.Success
+        : Haptics.NotificationFeedbackType.Error
+    );
     setResultado(res);
     onResult({ respuesta: respuesta.trim(), resultado: res });
   };
@@ -879,8 +982,9 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
     const pronPregs   = preguntas.filter(p => p.tipo === 'pronunciacion');
     const listenPregs = preguntas.filter(p => p.tipo === 'listening');
 
-    if (mcPregs.length > 0) {
-      AsyncStorage.getItem(quizStorageKey(user.id)).then(raw => {
+    (async () => {
+      if (mcPregs.length > 0) {
+        const raw = await AsyncStorage.getItem(quizStorageKey(user.id));
         if (!alive || !raw) return;
         try {
           const guardadas = JSON.parse(raw) as Record<string, number>;
@@ -888,10 +992,10 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
           mcPregs.forEach(p => { if (guardadas[p.id] !== undefined) aplicables[p.id] = guardadas[p.id]; });
           if (Object.keys(aplicables).length > 0) setRespuestas(aplicables);
         } catch {}
-      });
-    }
-    if (pronPregs.length > 0) {
-      AsyncStorage.getItem(pronStorageKey(user.id)).then(raw => {
+      }
+      if (!alive) return;
+      if (pronPregs.length > 0) {
+        const raw = await AsyncStorage.getItem(pronStorageKey(user.id));
         if (!alive || !raw) return;
         try {
           const guardadas = JSON.parse(raw) as Record<string, PronResultado>;
@@ -899,10 +1003,10 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
           pronPregs.forEach(p => { if (guardadas[p.id]) aplicables[p.id] = guardadas[p.id]; });
           if (Object.keys(aplicables).length > 0) setPronResultados(aplicables);
         } catch {}
-      });
-    }
-    if (writePregs.length > 0) {
-      AsyncStorage.getItem(writeStorageKey(user.id)).then(raw => {
+      }
+      if (!alive) return;
+      if (writePregs.length > 0) {
+        const raw = await AsyncStorage.getItem(writeStorageKey(user.id));
         if (!alive || !raw) return;
         try {
           const guardadas = JSON.parse(raw) as Record<string, WriteResultado>;
@@ -910,10 +1014,10 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
           writePregs.forEach(p => { if (guardadas[p.id]) aplicables[p.id] = guardadas[p.id]; });
           if (Object.keys(aplicables).length > 0) setWriteResultados(aplicables);
         } catch {}
-      });
-    }
-    if (listenPregs.length > 0) {
-      AsyncStorage.getItem(listenStorageKey(user.id)).then(raw => {
+      }
+      if (!alive) return;
+      if (listenPregs.length > 0) {
+        const raw = await AsyncStorage.getItem(listenStorageKey(user.id));
         if (!alive || !raw) return;
         try {
           const guardadas = JSON.parse(raw) as Record<string, ListenResultado>;
@@ -921,8 +1025,8 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
           listenPregs.forEach(p => { if (guardadas[p.id]) aplicables[p.id] = guardadas[p.id]; });
           if (Object.keys(aplicables).length > 0) setListenResultados(aplicables);
         } catch {}
-      });
-    }
+      }
+    })();
 
     return () => { alive = false; };
   }, [user, preguntaIds]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -932,6 +1036,13 @@ function QuizSection({ preguntas }: { preguntas: Pregunta[] }) {
   const seleccionar = async (preguntaId: string, opcion: number) => {
     if (respuestas[preguntaId] !== undefined) return;
     expandPreset();
+    const pregunta = preguntas.find(p => p.id === preguntaId);
+    const correcta = pregunta?.respuesta_correcta === opcion;
+    Haptics.notificationAsync(
+      correcta
+        ? Haptics.NotificationFeedbackType.Success
+        : Haptics.NotificationFeedbackType.Error
+    );
     setRespuestas(prev => ({ ...prev, [preguntaId]: opcion }));
     if (user) {
       try {
@@ -1318,6 +1429,22 @@ const s = StyleSheet.create({
   chatTitle: { fontSize: 13, fontWeight: '800', color: '#111', marginBottom: 2 },
   chatSub:   { fontSize: 12, color: '#888' },
   chevron:   { fontSize: 20, color: '#888' },
+
+  celebrationOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center',
+    zIndex: 999,
+  },
+  celebrationCard: {
+    backgroundColor: '#fff', borderRadius: 24,
+    paddingVertical: 36, paddingHorizontal: 48,
+    alignItems: 'center', gap: 10,
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, elevation: 10,
+  },
+  celebrationEmoji: { fontSize: 56 },
+  celebrationTitle: { fontSize: 20, fontWeight: '800', color: '#111' },
+  celebrationSub:   { fontSize: 13, color: '#888' },
 });
 
 // Shared styles used by sub-components

@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, ScrollView, TouchableOpacity, Animated,
   StyleSheet, ActivityIndicator, RefreshControl, Easing,
 } from 'react-native';
+import { SkeletonList } from '../components/SkeletonLoader';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -102,17 +104,20 @@ export default function CursoScreen({ navigation, route }: any) {
     const progresoMap: Record<string, EstadoSeccion> = {};
     (progreso as ProgresoUsuario[]).forEach(p => { progresoMap[p.seccion_id] = p.estado; });
 
-    const conEstado: SeccionConEstado[] = raices.map(s => ({
-      ...s,
-      estado: progresoMap[s.id] ?? 'locked',
-    }));
+    const conEstado: SeccionConEstado[] = raices.map((s, i) => {
+      const estadoBD = progresoMap[s.id];
+      if (estadoBD) return { ...s, estado: estadoBD };
+      // Sin registro: desbloquear si todas las anteriores están completadas
+      const anterioresCompletas = raices.slice(0, i).every(prev => progresoMap[prev.id] === 'done');
+      return { ...s, estado: anterioresCompletas ? 'active' : 'locked' };
+    });
 
     setSecciones(conEstado);
   }, [cursoId, user]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     load().finally(() => setLoading(false));
-  }, [load]);
+  }, [load]));
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -122,9 +127,14 @@ export default function CursoScreen({ navigation, route }: any) {
 
   if (loading) {
     return (
-      <View style={s.center}>
-        <ActivityIndicator size="large" color={NAVY} />
-      </View>
+      <SafeAreaView style={s.safe} edges={['top']}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 24, paddingBottom: 14 }}>
+          <View style={{ height: 20, width: '50%', backgroundColor: '#D0D8E4', borderRadius: 6, opacity: 0.5 }} />
+        </View>
+        <View style={{ paddingHorizontal: 16 }}>
+          <SkeletonList count={4} />
+        </View>
+      </SafeAreaView>
     );
   }
 

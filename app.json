@@ -14,10 +14,9 @@
       },
       "usesCleartextTraffic": true,
       "permissions": [
-        "android.permission.RECORD_AUDIO",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.anonymous.vlingoapp"
+      "package": "com.vlingo.app"
     },
     "ios": {
       "supportsTablet": false,
@@ -33,7 +32,8 @@
           "microphonePermission": "Allow VLINGO to use the microphone for pronunciation exercises.",
           "speechRecognitionPermission": "Allow VLINGO to use speech recognition for pronunciation exercises."
         }
-      ]
+      ],
+      "expo-document-picker"
     ]
   }
 }

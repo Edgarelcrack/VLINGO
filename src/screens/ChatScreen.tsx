@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, TextInput,
   TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform,
   ActivityIndicator, Alert, Modal, FlatList,
+  Animated, Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -50,6 +51,150 @@ function diffWords(original: string, corrected: string): { word: string; wrong: 
     if (!cleaned) return { word: token, wrong: false };
     return { word: token, wrong: !correctedSet.has(cleaned) };
   });
+}
+
+/* ── Helpers de animación ────────────────────────────────────────── */
+
+// Anima la entrada del hijo con fade-in + slide-up. Se ejecuta solo al
+// montarse, por lo que mensajes ya renderizados no re-animan en re-renders.
+function FadeInUp({
+  children,
+  delay = 0,
+  distance = 8,
+  duration = 280,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  distance?: number;
+  duration?: number;
+}) {
+  const opacity    = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(distance)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration,
+        delay,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration,
+        delay,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [opacity, translateY, delay, duration]);
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      {children}
+    </Animated.View>
+  );
+}
+
+// Tres puntos saltando para reemplazar el "Escribiendo..." con ActivityIndicator.
+function TypingDots({ color = '#2B4C72' }: { color?: string }) {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const make = (val: Animated.Value, offset: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(offset),
+          Animated.timing(val, {
+            toValue: 1,
+            duration: 320,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(val, {
+            toValue: 0,
+            duration: 320,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+    const a1 = make(dot1, 0);
+    const a2 = make(dot2, 160);
+    const a3 = make(dot3, 320);
+    a1.start(); a2.start(); a3.start();
+    return () => { a1.stop(); a2.stop(); a3.stop(); };
+  }, [dot1, dot2, dot3]);
+
+  const dotStyle = (val: Animated.Value) => ({
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: color,
+    opacity: val.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }),
+    transform: [{
+      translateY: val.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }),
+    }],
+  });
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+      <Animated.View style={dotStyle(dot1)} />
+      <Animated.View style={dotStyle(dot2)} />
+      <Animated.View style={dotStyle(dot3)} />
+    </View>
+  );
+}
+
+// TouchableOpacity con feedback de escala al presionar.
+function PressScale({
+  children,
+  onPress,
+  disabled,
+  style,
+  activeScale = 0.90,
+}: {
+  children: React.ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+  style?: any;
+  activeScale?: number;
+}) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const onIn = () => {
+    Animated.spring(scale, {
+      toValue: activeScale,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 0,
+    }).start();
+  };
+  const onOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 6,
+    }).start();
+  };
+
+  return (
+    <TouchableOpacity
+      onPressIn={onIn}
+      onPressOut={onOut}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={1}
+    >
+      <Animated.View style={[style, { transform: [{ scale }] }]}>
+        {children}
+      </Animated.View>
+    </TouchableOpacity>
+  );
 }
 
 const WELCOME: Msg = {
@@ -101,7 +246,14 @@ export default function ChatScreen() {
   const scrollRef = useRef<ScrollView>(null);
 
   const scrollToEnd = useCallback(() => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    // Doble rAF + timeout corto: garantiza que el layout del contenido nuevo
+    // ya se calculó antes de scrollear (importante en el primer mensaje,
+    // donde el contenido aún cabía en pantalla y el ScrollView no movía nada).
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+      });
+    });
   }, []);
 
   const initialize = useCallback(async () => {
@@ -118,8 +270,13 @@ export default function ChatScreen() {
         user.email?.split('@')[0] ??
         'Usuario';
 
-      // Obteniene/crear usuario válido en API
-      const userId = await ensureVlingoUser(name, user.email ?? undefined);
+      // Obteniene/crear usuario válido en API. El nivel viene de Supabase (test
+      // de nivelación) y es el que la IA usa para calibrar sus respuestas.
+      const userId = await ensureVlingoUser(
+        name,
+        user.email ?? undefined,
+        userProfile?.nivel ?? 'A1',
+      );
       setApiUserId(userId);
 
       // Determina qué sesión cargar según los parámetros de navegación
@@ -152,7 +309,7 @@ export default function ChatScreen() {
       );
       setStatus('error');
     }
-  }, [user, paramSessionId, paramFresh, scrollToEnd]);
+  }, [user, userProfile?.nivel, paramSessionId, paramFresh, scrollToEnd]);
 
   useEffect(() => {
     initialize();
@@ -345,14 +502,15 @@ export default function ChatScreen() {
     <SafeAreaView style={s.safe} edges={['top']}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => (navigation as any).goBack()} style={s.backBtn}>
-          <Text style={s.backArrow}>‹</Text>
+        <TouchableOpacity onPress={() => (navigation as any).goBack()} style={s.backBtn} hitSlop={8}>
+          <Ionicons name="chevron-back" size={24} color="#111" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Vlingo</Text>
         <TouchableOpacity
           onPress={confirmNewSession}
           style={s.newBtn}
           disabled={status !== 'ready'}
+          hitSlop={8}
         >
           <Text style={[s.newBtnText, status !== 'ready' && { color: '#ccc' }]}>
             + Nuevo
@@ -367,7 +525,8 @@ export default function ChatScreen() {
       >
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={s.msgs}
+          style={{ flex: 1 }}
+          contentContainerStyle={[s.msgs, { flexGrow: 1 }]}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={scrollToEnd}
         >
@@ -394,45 +553,51 @@ export default function ChatScreen() {
           {status === 'ready' && msgs.map(m => {
             if (m.type === 'eval' && m.evaluation && m.evalOriginal !== undefined) {
               return (
-                <View key={m.id} style={s.rowLeft}>
-                  <EvaluationBubble original={m.evalOriginal} result={m.evaluation} />
-                </View>
+                <FadeInUp key={m.id} distance={12}>
+                  <View style={s.rowLeft}>
+                    <EvaluationBubble original={m.evalOriginal} result={m.evaluation} />
+                  </View>
+                </FadeInUp>
               );
             }
             return (
-              <View key={m.id} style={m.type === 'user' ? s.rowRight : s.rowLeft}>
-                <View
-                  style={[
-                    s.bubble,
-                    m.type === 'user'   ? s.bubbleUser  :
-                    m.type === 'error'  ? s.bubbleError :
-                    s.bubbleBot,
-                  ]}
-                >
-                  <Text
+              <FadeInUp key={m.id}>
+                <View style={m.type === 'user' ? s.rowRight : s.rowLeft}>
+                  <View
                     style={[
-                      s.bubbleText,
-                      m.type === 'user'  && s.bubbleTextUser,
-                      m.type === 'error' && s.bubbleTextError,
+                      s.bubble,
+                      m.type === 'user'   ? s.bubbleUser  :
+                      m.type === 'error'  ? s.bubbleError :
+                      s.bubbleBot,
                     ]}
                   >
-                    {m.text}
-                  </Text>
+                    <Text
+                      style={[
+                        s.bubbleText,
+                        m.type === 'user'  && s.bubbleTextUser,
+                        m.type === 'error' && s.bubbleTextError,
+                      ]}
+                    >
+                      {m.text}
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              </FadeInUp>
             );
           })}
 
           {/* ── Indicador de escritura ── */}
           {sending && (
-            <View style={s.rowLeft}>
-              <View style={[s.bubble, s.bubbleBot, s.typingBubble]}>
-                <ActivityIndicator size="small" color="#2B4C72" />
-                <Text style={s.typingText}>
-                  {evaluationMode ? 'Evaluando...' : 'Escribiendo...'}
-                </Text>
+            <FadeInUp>
+              <View style={s.rowLeft}>
+                <View style={[s.bubble, s.bubbleBot, s.typingBubble]}>
+                  <TypingDots />
+                  <Text style={s.typingText}>
+                    {evaluationMode ? 'Evaluando' : 'Escribiendo'}
+                  </Text>
+                </View>
               </View>
-            </View>
+            </FadeInUp>
           )}
 
           <View style={{ height: 8 }} />
@@ -461,17 +626,19 @@ export default function ChatScreen() {
 
         {/* ── Modo evaluación activo ── */}
         {evaluationMode && (
-          <View style={s.attachedChipWrap}>
-            <View style={[s.attachedChip, s.evalChip]}>
-              <Ionicons name="checkmark-circle" size={14} color="#2E7D52" />
-              <Text style={[s.attachedChipText, { color: '#2E7D52' }]} numberOfLines={1}>
-                Modo evaluación · escribe en inglés
-              </Text>
-              <TouchableOpacity onPress={() => setEvaluationMode(false)} hitSlop={8}>
-                <Ionicons name="close-circle" size={18} color="#2E7D52" />
-              </TouchableOpacity>
+          <FadeInUp distance={10} duration={220}>
+            <View style={s.attachedChipWrap}>
+              <View style={[s.attachedChip, s.evalChip]}>
+                <Ionicons name="checkmark-circle" size={14} color="#2E7D52" />
+                <Text style={[s.attachedChipText, { color: '#2E7D52' }]} numberOfLines={1}>
+                  Modo evaluación · escribe en inglés
+                </Text>
+                <TouchableOpacity onPress={() => setEvaluationMode(false)} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color="#2E7D52" />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </FadeInUp>
         )}
 
         {/* ── Barra de entrada ── */}
@@ -499,14 +666,13 @@ export default function ChatScreen() {
             multiline
             editable={inputEnabled}
           />
-          <TouchableOpacity
+          <PressScale
             style={[s.sendBtn, !inputEnabled && s.sendBtnDisabled]}
             onPress={send}
-            activeOpacity={0.8}
             disabled={!inputEnabled}
           >
             <Ionicons name="send" size={16} color="#fff" />
-          </TouchableOpacity>
+          </PressScale>
         </View>
       </KeyboardAvoidingView>
 
@@ -643,50 +809,55 @@ function EvaluationBubble({
 
   return (
     <View style={s.evalBubble}>
-      <View style={s.evalHeader}>
-        <View style={s.evalIconWrap}>
-          <Ionicons name="checkmark-circle" size={14} color="#2B4C72" />
+      <FadeInUp distance={6} duration={260}>
+        <View style={s.evalHeader}>
+          <View style={s.evalIconWrap}>
+            <Ionicons name="checkmark-circle" size={14} color="#2B4C72" />
+          </View>
+          <Text style={s.evalTitle}>Evaluación</Text>
+          <View style={[s.scorePill, { backgroundColor: scoreColor + '20' }]}>
+            <Text style={[s.scoreTxt, { color: scoreColor }]}>{result.score}/100</Text>
+          </View>
         </View>
-        <Text style={s.evalTitle}>Evaluación</Text>
-        <View style={[s.scorePill, { backgroundColor: scoreColor + '20' }]}>
-          <Text style={[s.scoreTxt, { color: scoreColor }]}>{result.score}/100</Text>
-        </View>
-      </View>
+      </FadeInUp>
 
       {/* Frase original con palabras erradas en rojo */}
-      <Text style={s.evalSectionLabel}>Tu frase:</Text>
-      <Text style={s.evalOriginalText}>
-        {tokens.map((t, i) => (
-          <Text key={i} style={t.wrong ? s.wordWrong : undefined}>
-            {t.word}
-          </Text>
-        ))}
-      </Text>
-
-      <View style={s.evalDivider} />
+      <FadeInUp delay={120} distance={6} duration={260}>
+        <Text style={s.evalSectionLabel}>Tu frase:</Text>
+        <Text style={s.evalOriginalText}>
+          {tokens.map((t, i) => (
+            <Text key={i} style={t.wrong ? s.wordWrong : undefined}>
+              {t.word}
+            </Text>
+          ))}
+        </Text>
+        <View style={s.evalDivider} />
+      </FadeInUp>
 
       {/* Corrección sugerida */}
       {corrected ? (
-        <>
+        <FadeInUp delay={240} distance={6} duration={260}>
           <Text style={s.evalSectionLabel}>Corrección:</Text>
           <Text style={s.evalCorrectedText}>{corrected}</Text>
           <View style={s.evalDivider} />
-        </>
+        </FadeInUp>
       ) : null}
 
       {/* Feedback positivo + tip */}
-      {result.positive ? (
-        <View style={s.evalFeedbackRow}>
-          <Ionicons name="thumbs-up" size={13} color="#2E7D52" />
-          <Text style={s.evalPositiveTxt}>{result.positive}</Text>
-        </View>
-      ) : null}
-      {result.tip ? (
-        <View style={s.evalFeedbackRow}>
-          <Ionicons name="bulb" size={13} color="#B8860B" />
-          <Text style={s.evalTipTxt}>{result.tip}</Text>
-        </View>
-      ) : null}
+      <FadeInUp delay={360} distance={6} duration={260}>
+        {result.positive ? (
+          <View style={s.evalFeedbackRow}>
+            <Ionicons name="thumbs-up" size={13} color="#2E7D52" />
+            <Text style={s.evalPositiveTxt}>{result.positive}</Text>
+          </View>
+        ) : null}
+        {result.tip ? (
+          <View style={s.evalFeedbackRow}>
+            <Ionicons name="bulb" size={13} color="#B8860B" />
+            <Text style={s.evalTipTxt}>{result.tip}</Text>
+          </View>
+        ) : null}
+      </FadeInUp>
     </View>
   );
 }

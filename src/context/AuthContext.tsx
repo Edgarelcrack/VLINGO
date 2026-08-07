@@ -214,6 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'vlingo_api_user_id',
       'vlingo_session_id',
       'vlingo_api_email',
+      'vlingo_api_level',
     ]);
     await supabase.auth.signOut();
   };

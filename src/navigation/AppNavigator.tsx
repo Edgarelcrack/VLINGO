@@ -179,15 +179,17 @@ function AppTabs() {
 
 function LoadingScreen() {
   return (
-    <View style={{ flex: 1, backgroundColor: Colors.bg, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ flex: 1, backgroundColor: '#F2F4F6', alignItems: 'center', justifyContent: 'center' }}>
       <View style={{
-        width: 64, height: 64, borderRadius: 32,
-        backgroundColor: Colors.accentBlue,
-        alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+        width: 72, height: 72, borderRadius: 36,
+        backgroundColor: '#2B4C72',
+        alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+        shadowColor: '#2B4C72', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+        elevation: 5,
       }}>
-        <Text style={{ fontSize: 28, fontWeight: '900', color: '#fff' }}>V</Text>
+        <Text style={{ fontSize: 32, fontWeight: '900', color: '#fff' }}>V</Text>
       </View>
-      <ActivityIndicator color={Colors.accentBlue} size="large" />
+      <ActivityIndicator color="#2B4C72" size="large" />
     </View>
   );
 }

@@ -34,7 +34,7 @@ function sessionTitle(index: number, total: number): string {
 type Props = { navigation: any };
 
 export default function ChatHistoryScreen({ navigation }: Props) {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
 
   const [sessions,    setSessions]    = useState<ChatSession[]>([]);
   const [activeId,    setActiveId]    = useState<string | null>(null);
@@ -51,7 +51,11 @@ export default function ChatHistoryScreen({ navigation }: Props) {
         (user.user_metadata?.full_name as string | undefined) ??
         user.email?.split('@')[0] ??
         'Usuario';
-      const uid  = await ensureVlingoUser(name, user.email ?? undefined);
+      const uid  = await ensureVlingoUser(
+        name,
+        user.email ?? undefined,
+        userProfile?.nivel ?? 'A1',
+      );
       setUserId(uid);
 
       const [list, saved] = await Promise.all([
@@ -66,7 +70,7 @@ export default function ChatHistoryScreen({ navigation }: Props) {
       setErrorMsg(err.message ?? 'Error al cargar el historial');
       setStatus('error');
     }
-  }, [user]);
+  }, [user, userProfile?.nivel]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 

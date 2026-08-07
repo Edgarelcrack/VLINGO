@@ -5,6 +5,7 @@ const BASE = API_URL;
 const KEY_USER_ID      = 'vlingo_api_user_id';
 const KEY_SESSION_ID   = 'vlingo_session_id';
 const KEY_STORED_EMAIL = 'vlingo_api_email';
+const KEY_STORED_LEVEL = 'vlingo_api_level';
 
 export type ChatResponse = {
   sessionId: string;
@@ -55,18 +56,23 @@ async function userExistsInApi(userId: string): Promise<boolean> {
 export async function ensureVlingoUser(
   name: string,
   email?: string,
+  level: string = 'A1',
 ): Promise<string> {
   const storedId    = await AsyncStorage.getItem(KEY_USER_ID);
   const storedEmail = await AsyncStorage.getItem(KEY_STORED_EMAIL);
+  const storedLevel = await AsyncStorage.getItem(KEY_STORED_LEVEL);
 
-  // Si es el mismo usuario, se guarda el ID en caché y aún válido en el servidor
-  if (storedId && email && storedEmail === email) {
+  // Si es el mismo usuario, se guarda el ID en caché y aún válido en el servidor.
+  // El nivel entra en la condición a propósito: si el usuario subió de nivel en
+  // Supabase, la caché deja de ser válida y se fuerza el upsert de abajo para
+  // que la API se entere del nivel nuevo.
+  if (storedId && email && storedEmail === email && storedLevel === level) {
     const stillExists = await userExistsInApi(storedId);
     if (stillExists) return storedId;
   }
 
   // En caso de no encontrarse en caché o no ser el mismo usuario, resolver desde la API (upsert por email → siempre retorna el usuario correcto)
-  const data = await post<{ user: { id: string } }>('/api/progress/user', { name, email });
+  const data = await post<{ user: { id: string } }>('/api/progress/user', { name, email, level });
   const newId = data.user.id;
 
   if (storedId && storedId !== newId) {
@@ -77,6 +83,7 @@ export async function ensureVlingoUser(
   await AsyncStorage.multiSet([
     [KEY_USER_ID,      newId],
     [KEY_STORED_EMAIL, email ?? ''],
+    [KEY_STORED_LEVEL, level],
   ]);
 
   return newId;

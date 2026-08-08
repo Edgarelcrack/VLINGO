@@ -33,7 +33,8 @@
           "speechRecognitionPermission": "Allow VLINGO to use speech recognition for pronunciation exercises."
         }
       ],
-      "expo-document-picker"
+      "expo-document-picker",
+      "expo-font"
     ],
     "extra": {
       "eas": {

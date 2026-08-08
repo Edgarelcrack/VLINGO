@@ -53,10 +53,6 @@ function diffWords(original: string, corrected: string): { word: string; wrong: 
   });
 }
 
-/* ── Helpers de animación ────────────────────────────────────────── */
-
-// Anima la entrada del hijo con fade-in + slide-up. Se ejecuta solo al
-// montarse, por lo que mensajes ya renderizados no re-animan en re-renders.
 function FadeInUp({
   children,
   delay = 0,
@@ -97,7 +93,6 @@ function FadeInUp({
   );
 }
 
-// Tres puntos saltando para reemplazar el "Escribiendo..." con ActivityIndicator.
 function TypingDots({ color = '#2B4C72' }: { color?: string }) {
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
@@ -149,7 +144,6 @@ function TypingDots({ color = '#2B4C72' }: { color?: string }) {
   );
 }
 
-// TouchableOpacity con feedback de escala al presionar.
 function PressScale({
   children,
   onPress,
@@ -270,8 +264,6 @@ export default function ChatScreen() {
         user.email?.split('@')[0] ??
         'Usuario';
 
-      // Obteniene/crear usuario válido en API. El nivel viene de Supabase (test
-      // de nivelación) y es el que la IA usa para calibrar sus respuestas.
       const userId = await ensureVlingoUser(
         name,
         user.email ?? undefined,

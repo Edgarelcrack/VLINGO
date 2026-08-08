@@ -34,6 +34,12 @@
         }
       ],
       "expo-document-picker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "44dd72bc-9e7b-4811-872f-ca31cb6b0bfa"
+      }
+    },
+    "owner": "edgarandresvargasg"
   }
 }

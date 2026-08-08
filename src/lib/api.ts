@@ -41,6 +41,15 @@ async function pedir(path: string, init?: RequestInit): Promise<Response> {
 
 async function leerError(res: Response): Promise<never> {
   const err: ApiError = await res.json().catch(() => ({ error: 'Sin respuesta' }));
+
+  if (res.status === 401) {
+    throw new Error(
+      API_KEY
+        ? 'La API rechazó la clave. Verifica que API_KEY coincida en VLINGO/.env y vlingo-api/.env.'
+        : 'La app se compiló sin API_KEY. Reinicia el bundler con caché limpio (npx expo start -c) o regenera el APK.',
+    );
+  }
+
   throw new Error(err.error ?? 'Error de red');
 }
 

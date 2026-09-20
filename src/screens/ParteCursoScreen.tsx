@@ -19,8 +19,15 @@ import {
 import { getPreguntasPorSeccion } from '../services/preguntasService';
 import { incrementarPuntos } from '../services/puntuacionService';
 import { Seccion, ProgresoUsuario, EstadoSeccion, ContenidoBloque, Pregunta } from '../types';
+import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
 
 type SeccionConEstado = Seccion & { estado: EstadoSeccion };
+
+/**
+ * Solo un audio de listening puede sonar a la vez. Cada ListenSection tiene su
+ * propio Sound, así que sin esto dos ejercicios de la misma lección se pisan.
+ */
+let audioActivo: { parar: () => void } | null = null;
 
 const expandPreset = () =>
   LayoutAnimation.configureNext({
@@ -89,6 +96,8 @@ export default function ParteCursoScreen({ navigation, route }: any) {
   const { seccionId, cursoId, titulo } = route?.params ?? {};
   const { user, refreshProfile } = useAuth();
   const insets = useSafeAreaInsets();
+  // Mantiene visible el campo enfocado de los ejercicios al abrir el teclado
+  const { scrollRef, scrollProps, keyboardHeight } = useKeyboardAwareScroll();
 
   const notificarXP = (monto: number) => {
     if (monto <= 0) return;
@@ -259,7 +268,9 @@ export default function ParteCursoScreen({ navigation, route }: any) {
         </View>
 
         <ScrollView
-          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 }]}
+          ref={scrollRef}
+          {...scrollProps}
+          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 + keyboardHeight }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Progress overview */}
@@ -424,7 +435,9 @@ export default function ParteCursoScreen({ navigation, route }: any) {
       </View>
 
       <ScrollView
-        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 }]}
+        ref={scrollRef}
+        {...scrollProps}
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 + keyboardHeight }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Lesson hero */}
@@ -835,6 +848,7 @@ function ListeningCard({
   const [respuesta, setRespuesta]   = useState(saved?.respuesta ?? '');
   const [resultado, setResultado]   = useState<ListenResultado['resultado'] | null>(saved?.resultado ?? null);
   const isMountedRef                = useRef(true);
+  const tokenAudioRef               = useRef<{ parar: () => void }>({ parar: () => {} });
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -845,6 +859,18 @@ function ListeningCard({
     };
   }, [sound]);
 
+  // Solo al desmontar: si teníamos el turno, lo soltamos
+  useEffect(() => () => {
+    if (audioActivo === tokenAudioRef.current) audioActivo = null;
+  }, []);
+
+  /** Pide el turno de reproducción y silencia al que lo tuviera. */
+  const tomarTurnoAudio = (parar: () => void) => {
+    tokenAudioRef.current.parar = parar;
+    if (audioActivo && audioActivo !== tokenAudioRef.current) audioActivo.parar();
+    audioActivo = tokenAudioRef.current;
+  };
+
   const toggleAudio = async () => {
     if (!audioUrl) { Alert.alert('Sin audio', 'Esta pregunta no tiene audio configurado.'); return; }
     if (isLoading) return;
@@ -853,6 +879,10 @@ function ListeningCard({
         await sound.pauseAsync();
         setIsPlaying(false);
       } else {
+        tomarTurnoAudio(() => {
+          sound.pauseAsync().catch(() => {});
+          if (isMountedRef.current) setIsPlaying(false);
+        });
         await sound.playAsync();
         setIsPlaying(true);
       }
@@ -865,6 +895,10 @@ function ListeningCard({
         { uri: audioUrl },
         { shouldPlay: true },
       );
+      tomarTurnoAudio(() => {
+        newSound.pauseAsync().catch(() => {});
+        if (isMountedRef.current) setIsPlaying(false);
+      });
       setSound(newSound);
       setIsPlaying(true);
       newSound.setOnPlaybackStatusUpdate(status => {

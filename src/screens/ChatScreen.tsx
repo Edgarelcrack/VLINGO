@@ -340,9 +340,12 @@ export default function ChatScreen() {
     try {
       const text = await getCursoContentText(curso.id);
       attachedContextRef.current = text || null;
-      console.log('[Chat][curso] adjuntado:', curso.titulo,
-        '| chars:', text?.length ?? 0);
-      console.log('[Chat][curso] preview:', (text ?? '').slice(0, 400));
+      if (__DEV__) {
+        // Fuera de desarrollo esto volcaría contenido del curso al logcat
+        console.log('[Chat][curso] adjuntado:', curso.titulo,
+          '| chars:', text?.length ?? 0);
+        console.log('[Chat][curso] preview:', (text ?? '').slice(0, 400));
+      }
       if (!text) {
         Alert.alert(
           'Curso vacío',
@@ -512,7 +515,9 @@ export default function ChatScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        /* En Android el manifest ya usa adjustResize; añadir 'height' encima
+           duplica el manejo y colapsa la lista de mensajes. */
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <ScrollView

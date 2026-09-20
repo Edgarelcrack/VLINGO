@@ -15,6 +15,8 @@ type AuthContextType = {
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
+  /** Mensaje si el perfil no se pudo cargar; permite reintentar en vez de colgarse. */
+  profileError: string | null;
   signUp: (
     email: string,
     password: string,
@@ -37,13 +39,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser]                 = useState<User | null>(null);
   const [userProfile, setUserProfile]   = useState<UserProfile | null>(null);
   const [loading, setLoading]           = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await getUserProfile(userId);
-    console.log('[AuthContext] fetchProfile →', { userId, data, error });
 
     if (data) {
       setUserProfile(data);
+      setProfileError(null);
       return;
     }
 
@@ -56,7 +59,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       || errLower.includes('json object');
 
     if (!isNotFound) {
-      console.error('[AuthContext] fetchProfile error (not creating row):', error);
+      // Fallo real (red, permisos...). Antes se hacía return en silencio y la
+      // app se quedaba en el splash para siempre; ahora queda registrado para
+      // que RootNavigator pueda ofrecer reintentar.
+      if (__DEV__) console.error('[AuthContext] fetchProfile:', error);
+      setProfileError(error ?? 'No se pudo cargar tu perfil');
       return;
     }
 
@@ -70,13 +77,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       { onConflict: 'id', ignoreDuplicates: true },
     );
-    if (upsertErr) {
+    if (upsertErr && __DEV__) {
       console.error('[AuthContext] fallback upsert failed:', upsertErr.message);
     }
 
     const { data: retry, error: retryErr } = await getUserProfile(userId);
-    console.log('[AuthContext] fetchProfile retry →', { retry, retryErr });
-    setUserProfile(retry);
+    if (retry) {
+      setUserProfile(retry);
+      setProfileError(null);
+    } else {
+      setProfileError(retryErr ?? upsertErr?.message ?? 'No se pudo crear tu perfil');
+    }
   };
 
   useEffect(() => {
@@ -94,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchProfile(session.user.id);
       } else {
         setUserProfile(null);
+        setProfileError(null);
       }
       setLoading(false);
     });
@@ -115,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         { id: userId, nombre, email, tipo, nivel: nivelFinal, fecha_registro: new Date().toISOString() },
         { onConflict: 'id' }
       );
-    if (error) {
+    if (error && __DEV__) {
       console.error('[AuthContext] crearRegistroUsuario upsert failed:', error.message);
     }
     return error?.message ?? null;
@@ -154,6 +166,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data?.user) {
+        // El código se consume ANTES de asignar el rol. Al revés, si el código
+        // se agotaba entre medias, la cuenta quedaba como profesor igualmente.
+        const { consumido } = await consumirCodigoInvitacion(codigoInvitacion, 'profesor');
+        if (!consumido) {
+          // La cuenta de auth ya existe: le dejamos un perfil válido de
+          // estudiante en vez de dejarla a medias y sin fila en 'usuario'.
+          await crearRegistroUsuario(
+            data.user.id,
+            name.trim(),
+            email.trim().toLowerCase(),
+            'estudiante',
+            nivel
+          );
+          await fetchProfile(data.user.id);
+          return {
+            error: 'El código fue utilizado por otro usuario antes de completar el registro. Tu cuenta se creó como estudiante.',
+          };
+        }
+
         const upsertError = await crearRegistroUsuario(
           data.user.id,
           name.trim(),
@@ -163,10 +194,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
         if (upsertError) return { error: 'Error asignando rol de profesor: ' + upsertError };
 
-        const { consumido } = await consumirCodigoInvitacion(codigoInvitacion, 'profesor');
-        if (!consumido) {
-          return { error: 'El código fue utilizado por otro usuario antes de completar el registro' };
-        }
         await fetchProfile(data.user.id);
       }
       return { error: null };
@@ -241,7 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, userProfile, loading, signUp, signIn, signOut, resetPassword, reclamarProfesor, refreshProfile }}>
+    <AuthContext.Provider value={{ session, user, userProfile, loading, profileError, signUp, signIn, signOut, resetPassword, reclamarProfesor, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

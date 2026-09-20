@@ -22,6 +22,32 @@ export type HistoryMessage = {
 
 type ApiError = { error: string; detail?: string };
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
+/**
+ * Un túnel caído no lanza excepción: Cloudflare responde con su propia página
+ * de error. Por eso estos códigos también significan "esta URL ya no sirve".
+ */
+const pareceTunelCaido = (status: number) =>
+  status === 502 || status === 503 || status === 504 || status === 530;
+
+/** fetch no trae timeout: sin esto, una API colgada deja la app girando. */
+async function fetchConTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controlador = new AbortController();
+  let expirado = false;
+  const corte = setTimeout(() => { expirado = true; controlador.abort(); }, REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controlador.signal });
+  } catch (err) {
+    if (expirado) {
+      throw new Error('El servidor no respondió a tiempo. Comprueba que la API esté encendida.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(corte);
+  }
+}
+
 async function pedir(path: string, init?: RequestInit): Promise<Response> {
   const conCabeceras: RequestInit = {
     ...init,
@@ -31,16 +57,36 @@ async function pedir(path: string, init?: RequestInit): Promise<Response> {
     },
   };
 
+  // Primer intento con la URL vigente
+  let respuestaCaida: Response | null = null;
   try {
-    return await fetch(`${getApiBase()}${path}`, conCabeceras);
-  } catch (errRed) {
-    const urlFresca = await refreshApiUrl();
-    return fetch(`${urlFresca}${path}`, conCabeceras);
+    const res = await fetchConTimeout(`${getApiBase()}${path}`, conCabeceras);
+    if (!pareceTunelCaido(res.status)) return res;
+    respuestaCaida = res;
+  } catch {
+    // Error de red o timeout: puede que la URL haya cambiado
+  }
+
+  // Segundo intento con la URL recién leída de Supabase
+  const urlFresca = await refreshApiUrl();
+  try {
+    return await fetchConTimeout(`${urlFresca}${path}`, conCabeceras);
+  } catch (err) {
+    // Si el primer intento al menos respondió, devolvemos esa respuesta para
+    // que el llamante muestre el error real en vez de uno de red.
+    if (respuestaCaida) return respuestaCaida;
+    throw err;
   }
 }
 
 async function leerError(res: Response): Promise<never> {
   const err: ApiError = await res.json().catch(() => ({ error: 'Sin respuesta' }));
+
+  if (pareceTunelCaido(res.status)) {
+    throw new Error(
+      'No se pudo contactar con la API. Comprueba que el servidor y el túnel estén encendidos.',
+    );
+  }
 
   if (res.status === 401) {
     throw new Error(

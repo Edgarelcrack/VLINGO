@@ -11,6 +11,7 @@ import {
   eliminarPregunta, MAX_PREGUNTAS_POR_SECCION,
 } from '../services/preguntasService';
 import { pickAndUploadAudio } from '../services/storageService';
+import GrabadorAudio from '../components/GrabadorAudio';
 import { Pregunta, TipoPregunta } from '../types';
 
 const NAVY = '#2B4C72';
@@ -421,6 +422,12 @@ function PreguntaModal({
                     </>
                   )}
                 </TouchableOpacity>
+                {!audioUrl && (
+                  <>
+                    <Text style={m.audioSep}>o</Text>
+                    <GrabadorAudio onSubido={setAudioUrl} disabled={uploadingAudio} />
+                  </>
+                )}
                 <Text style={m.label}>Respuesta esperada del estudiante</Text>
                 <TextInput
                   style={[m.input, m.inputMulti]}
@@ -636,4 +643,8 @@ const m = StyleSheet.create({
     backgroundColor: 'rgba(46,125,82,0.07)', borderColor: '#2E7D52', borderStyle: 'solid',
   },
   audioBtnTxt: { fontSize: 13, color: NAVY, fontWeight: '600' },
+  audioSep: {
+    fontSize: 11, color: '#98A4B3', textAlign: 'center',
+    marginTop: -4, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1,
+  },
 });

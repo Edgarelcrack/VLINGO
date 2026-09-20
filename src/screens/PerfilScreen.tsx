@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, Modal,
-  ActivityIndicator, Animated, Easing, RefreshControl,
+  ActivityIndicator, Animated, Easing, RefreshControl, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -302,7 +302,9 @@ export default function PerfilScreen({ navigation }: any) {
 
       {/* Modal código de invitación */}
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
-        <View style={m.overlay}>
+        {/* El adjustResize del manifest no alcanza al contenido de un Modal,
+            así que aquí el KeyboardAvoidingView sí hace falta. */}
+        <KeyboardAvoidingView style={m.overlay} behavior="padding">
           <View style={m.card}>
             <View style={m.iconCircle}>
               <Ionicons name="key" size={22} color={NAVY} />
@@ -333,7 +335,7 @@ export default function PerfilScreen({ navigation }: any) {
               <Text style={m.cancelTxt}>Cancelar</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

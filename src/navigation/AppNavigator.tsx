@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, View, Platform, ActivityIndicator } from 'react-native';
+import { Text, View, Platform, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -194,15 +194,82 @@ function LoadingScreen() {
   );
 }
 
+/**
+ * Salida cuando el perfil no carga. Sin esto, un fallo de red al abrir la app
+ * dejaba al usuario en la pantalla de carga indefinidamente, sin mensaje.
+ */
+function ProfileErrorScreen({
+  mensaje,
+  onReintentar,
+  onSalir,
+}: {
+  mensaje: string;
+  onReintentar: () => Promise<void>;
+  onSalir: () => Promise<void>;
+}) {
+  const [reintentando, setReintentando] = React.useState(false);
+
+  const reintentar = async () => {
+    setReintentando(true);
+    try { await onReintentar(); } finally { setReintentando(false); }
+  };
+
+  return (
+    <View style={{
+      flex: 1, backgroundColor: '#F2F4F6',
+      alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32,
+    }}>
+      <Ionicons name="cloud-offline-outline" size={44} color="#2B4C72" />
+      <Text style={{ fontSize: 17, fontWeight: '800', color: '#1E2D3D', marginTop: 16, textAlign: 'center' }}>
+        No se pudo cargar tu perfil
+      </Text>
+      <Text style={{ fontSize: 13, color: '#6B7A8C', marginTop: 8, textAlign: 'center' }}>
+        Revisa tu conexión e inténtalo de nuevo.
+      </Text>
+      <Text style={{ fontSize: 11, color: '#9AA7B5', marginTop: 6, textAlign: 'center' }} numberOfLines={3}>
+        {mensaje}
+      </Text>
+      <TouchableOpacity
+        onPress={reintentar}
+        disabled={reintentando}
+        activeOpacity={0.85}
+        style={{
+          marginTop: 22, backgroundColor: '#2B4C72', borderRadius: 12,
+          paddingVertical: 13, paddingHorizontal: 34, minWidth: 150,
+          alignItems: 'center', opacity: reintentando ? 0.6 : 1,
+        }}
+      >
+        {reintentando
+          ? <ActivityIndicator color="#fff" />
+          : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Reintentar</Text>}
+      </TouchableOpacity>
+      <TouchableOpacity onPress={onSalir} style={{ marginTop: 14 }} activeOpacity={0.7}>
+        <Text style={{ color: '#6B7A8C', fontSize: 13, fontWeight: '600' }}>Cerrar sesión</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function RootNavigator() {
-  const { session, userProfile, loading } = useAuth();
+  const { session, userProfile, loading, profileError, refreshProfile, signOut } = useAuth();
 
   if (loading) return <LoadingScreen />;
   if (!session) return <AuthStack />;
 
   // Si hay sesión pero el perfil aún no se ha cargado, esperamos antes de
   // decidir si mostrar el test o las tabs (evita un flash de AppTabs).
-  if (!userProfile) return <LoadingScreen />;
+  if (!userProfile) {
+    if (profileError) {
+      return (
+        <ProfileErrorScreen
+          mensaje={profileError}
+          onReintentar={refreshProfile}
+          onSalir={signOut}
+        />
+      );
+    }
+    return <LoadingScreen />;
+  }
 
   // Solo estudiantes con nivel === null deben hacer el test de nivelación.
   // Profesores y administradores nunca entran aquí.

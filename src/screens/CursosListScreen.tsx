@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, RefreshControl, Alert,
   Platform,
 } from 'react-native';
+import CampoTexto from '../components/CampoTexto';
 import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -193,7 +194,7 @@ export default function CursosListScreen({ navigation }: any) {
       <View style={s.searchRow}>
         <View style={s.searchBox}>
           <Ionicons name="search" size={16} color="#999" />
-          <TextInput
+          <CampoTexto
             style={s.searchInput}
             value={search}
             onChangeText={setSearch}

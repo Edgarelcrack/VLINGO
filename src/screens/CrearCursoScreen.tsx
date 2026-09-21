@@ -4,6 +4,7 @@ import {
   StyleSheet, ScrollView, ActivityIndicator, Alert,
   Platform,
 } from 'react-native';
+import CampoTexto from '../components/CampoTexto';
 import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -148,7 +149,7 @@ export default function CrearCursoScreen({ navigation, route }: any) {
           <Text style={s.label}>Título del curso *</Text>
           <View style={[s.inputWrap, errors.titulo && s.inputError]}>
             <Ionicons name="bookmark-outline" size={16} color="#999" />
-            <TextInput
+            <CampoTexto
               style={s.input}
               placeholder="Ej: Business English Fundamentals"
               placeholderTextColor="#BBB"
@@ -162,7 +163,7 @@ export default function CrearCursoScreen({ navigation, route }: any) {
 
           <Text style={s.label}>Descripción</Text>
           <View style={[s.inputWrap, s.textAreaWrap]}>
-            <TextInput
+            <CampoTexto
               style={[s.input, s.textArea]}
               placeholder="¿De qué trata este curso? ¿Qué aprenderá el estudiante?"
               placeholderTextColor="#BBB"

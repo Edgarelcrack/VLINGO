@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, Alert, Modal,
   Platform,
 } from 'react-native';
+import CampoTexto from '../components/CampoTexto';
 import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -359,7 +360,7 @@ function PreguntaModal({
               {tipo === 'pronunciacion' ? 'Frase a pronunciar' :
                tipo === 'listening'     ? 'Pregunta sobre el audio' : 'Enunciado'}
             </Text>
-            <TextInput
+            <CampoTexto
               style={[m.input, m.inputMulti]}
               value={enunciado}
               onChangeText={setEnunciado}
@@ -377,7 +378,7 @@ function PreguntaModal({
             {tipo === 'pronunciacion' ? (
               <>
                 <Text style={m.label}>Transcripción esperada</Text>
-                <TextInput
+                <CampoTexto
                   style={m.input}
                   value={transcripcionEsperada}
                   onChangeText={setTranscripcion}
@@ -430,7 +431,7 @@ function PreguntaModal({
                   </>
                 )}
                 <Text style={m.label}>Respuesta esperada del estudiante</Text>
-                <TextInput
+                <CampoTexto
                   style={[m.input, m.inputMulti]}
                   value={transcripcionEsperada}
                   onChangeText={setTranscripcion}
@@ -462,7 +463,7 @@ function PreguntaModal({
                           ? <Ionicons name="checkmark" size={14} color="#fff" />
                           : <Text style={m.radioTxt}>{LETRAS[idx]}</Text>}
                       </TouchableOpacity>
-                      <TextInput
+                      <CampoTexto
                         style={[m.input, { flex: 1, marginBottom: 0 }]}
                         value={op}
                         onChangeText={(v) => setOpcion(idx, v)}

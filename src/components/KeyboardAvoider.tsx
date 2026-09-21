@@ -1,18 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { StyleProp, TextInput, View, ViewStyle } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { StyleProp, View, ViewStyle } from 'react-native';
 import { useTecladoEnfoque } from '../hooks/useTecladoEnfoque';
+import { obtenerCampoActivo } from './CampoTexto';
 
-
+/** Separación entre el campo y el borde del teclado. */
 const MARGEN = 8;
 
-
-const TOLERANCIA = 2;
-
-
-const MAX_PASADAS = 8;
-const ESPERA_PASADA_MS = 50;
-
-
+/**
+ * Sube el contenido lo justo para que el campo enfocado quede sobre el teclado.
+ *
+ * Para elementos anclados abajo (la barra del chat, las hojas de los editores),
+ * que no pueden resolverlo con scroll.
+ *
+ * El ajuste es acumulativo (hueco actual + lo que falte), así que converge solo
+ * y también corrige al pasar de un campo a otro con el teclado abierto.
+ */
 export default function KeyboardAvoider({
   children,
   style,
@@ -22,51 +24,26 @@ export default function KeyboardAvoider({
 }) {
   const [hueco, setHueco] = useState(0);
   const huecoRef = useRef(0);
-  const temporizadorRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const pararAjuste = () => {
-    if (temporizadorRef.current) {
-      clearTimeout(temporizadorRef.current);
-      temporizadorRef.current = null;
-    }
-  };
-
-  useEffect(() => pararAjuste, []);
 
   const aplicar = (valor: number) => {
     huecoRef.current = valor;
     setHueco(valor);
   };
 
-  const ajustar = (borde: number, pasada: number) => {
-    const campo = TextInput.State.currentlyFocusedInput?.();
+  useTecladoEnfoque(estado => {
+    if (!estado) { aplicar(0); return; }
+
+    const campo = obtenerCampoActivo();
     if (!campo) return;
 
     try {
       campo.measureInWindow((_x, y, _w, alto) => {
-        const falta = y + alto + MARGEN - borde;
-        if (Math.abs(falta) <= TOLERANCIA) return;
-
+        const falta = y + alto + MARGEN - estado.borde;
         const nuevo = Math.max(0, huecoRef.current + falta);
-        if (nuevo === huecoRef.current) return;
-
-        aplicar(nuevo);
-
-        // Comprobar si de verdad se movió lo pedido; si no, insistir
-        if (pasada + 1 < MAX_PASADAS) {
-          temporizadorRef.current = setTimeout(
-            () => ajustar(borde, pasada + 1),
-            ESPERA_PASADA_MS,
-          );
-        }
+        // Un píxel de tolerancia evita renders por redondeos
+        if (Math.abs(nuevo - huecoRef.current) > 1) aplicar(nuevo);
       });
     } catch {}
-  };
-
-  useTecladoEnfoque(estado => {
-    pararAjuste();
-    if (!estado) { aplicar(0); return; }
-    ajustar(estado.borde, 0);
   });
 
   return <View style={[style, { paddingBottom: hueco }]}>{children}</View>;

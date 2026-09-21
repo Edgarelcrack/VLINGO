@@ -4,6 +4,7 @@ import {
   StyleSheet, Platform,
   ScrollView, ActivityIndicator,
 } from 'react-native';
+import CampoTexto from '../components/CampoTexto';
 import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -68,7 +69,7 @@ export default function ForgotPasswordScreen({ navigation }: any) {
               <Text style={s.label}>Correo electrónico</Text>
               <View style={[s.inputWrap, error ? s.inputError : null]}>
                 <Text style={s.inputIcon}></Text>
-                <TextInput
+                <CampoTexto
                   style={s.input}
                   placeholder="correo@ejemplo.com"
                   placeholderTextColor="#BBB"

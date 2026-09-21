@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, Alert, Modal,
   Platform,
 } from 'react-native';
+import CampoTexto from '../components/CampoTexto';
 import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -50,7 +51,7 @@ function ModalInput({
         <View style={[m.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <View style={m.handle} />
           <Text style={m.title}>{titulo}</Text>
-          <TextInput
+          <CampoTexto
             style={[m.input, multiline && m.inputMulti]}
             value={txt}
             onChangeText={setTxt}

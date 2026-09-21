@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, Alert, Modal,
   Platform,
 } from 'react-native';
+import CampoTexto from '../components/CampoTexto';
 import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -347,7 +348,7 @@ function BloqueModal({
             style={{ maxHeight: 420 }}
           >
             {tipo === 'texto' && (
-              <TextInput
+              <CampoTexto
                 style={[m.input, m.inputMulti]}
                 value={texto}
                 onChangeText={setTexto}
@@ -364,7 +365,7 @@ function BloqueModal({
                 {items.map((it, i) => (
                   <View key={i} style={m.itemRow}>
                     <Text style={m.itemBullet}>•</Text>
-                    <TextInput
+                    <CampoTexto
                       style={[m.input, { flex: 1, marginBottom: 0 }]}
                       value={it}
                       onChangeText={(v) => setItems(prev => prev.map((x, idx) => idx === i ? v : x))}
@@ -394,7 +395,7 @@ function BloqueModal({
             {tipo === 'ejercicio' && (
               <>
                 <Text style={m.label}>Pregunta</Text>
-                <TextInput
+                <CampoTexto
                   style={[m.input, m.inputMulti]}
                   value={pregunta}
                   onChangeText={setPregunta}
@@ -404,7 +405,7 @@ function BloqueModal({
                   textAlignVertical="top"
                 />
                 <Text style={m.label}>Respuesta sugerida (opcional)</Text>
-                <TextInput
+                <CampoTexto
                   style={m.input}
                   value={respuesta}
                   onChangeText={setRespuesta}

@@ -4,6 +4,7 @@ import {
   StyleSheet, Platform,
   ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
+import CampoTexto from '../components/CampoTexto';
 import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
@@ -134,7 +135,7 @@ export default function RegisterScreen({ navigation }: any) {
             <Text style={s.label}>Nombre completo</Text>
             <View style={[s.inputWrap, errors.name ? s.inputError : null]}>
               <Text style={s.inputIcon}></Text>
-              <TextInput
+              <CampoTexto
                 style={s.input}
                 placeholder="Tu nombre"
                 placeholderTextColor="#BBB"
@@ -149,7 +150,7 @@ export default function RegisterScreen({ navigation }: any) {
             <Text style={s.label}>Correo electrónico</Text>
             <View style={[s.inputWrap, errors.email ? s.inputError : null]}>
               <Text style={s.inputIcon}></Text>
-              <TextInput
+              <CampoTexto
                 style={s.input}
                 placeholder="correo@ejemplo.com"
                 placeholderTextColor="#BBB"
@@ -166,7 +167,7 @@ export default function RegisterScreen({ navigation }: any) {
             <Text style={s.label}>Contraseña</Text>
             <View style={[s.inputWrap, errors.password ? s.inputError : null]}>
               <Text style={s.inputIcon}></Text>
-              <TextInput
+              <CampoTexto
                 style={s.input}
                 placeholder="Mínimo 6 caracteres"
                 placeholderTextColor="#BBB"
@@ -194,7 +195,7 @@ export default function RegisterScreen({ navigation }: any) {
             <Text style={s.label}>Confirmar contraseña</Text>
             <View style={[s.inputWrap, errors.confirm ? s.inputError : null]}>
               <Text style={s.inputIcon}></Text>
-              <TextInput
+              <CampoTexto
                 style={s.input}
                 placeholder="Repite tu contraseña"
                 placeholderTextColor="#BBB"
@@ -215,7 +216,7 @@ export default function RegisterScreen({ navigation }: any) {
                 <Text style={s.label}>Código de invitación</Text>
                 <View style={[s.inputWrap, errors.codigo ? s.inputError : null]}>
                   <Text style={s.inputIcon}></Text>
-                  <TextInput
+                  <CampoTexto
                     style={s.input}
                     placeholder="Código proporcionado por tu institución"
                     placeholderTextColor="#BBB"

@@ -6,6 +6,7 @@ import {
   StyleSheet, ActivityIndicator, ToastAndroid, Platform, Alert,
   LayoutAnimation, TextInput, Keyboard,
 } from 'react-native';
+import CampoTexto from '../components/CampoTexto';
 import { Audio } from 'expo-av';
 let SpeechModule: any = null;
 try { SpeechModule = require('expo-speech-recognition').ExpoSpeechRecognitionModule; } catch {}
@@ -793,7 +794,7 @@ function CompletarFraseCard({
       </View>
 
       <Text style={write.inputLabel}>Completa el espacio en blanco:</Text>
-      <TextInput
+      <CampoTexto
         style={[write.input, isAnswered && { opacity: 0.6 }]}
         value={respuesta}
         onChangeText={setRespuesta}
@@ -966,7 +967,7 @@ function ListeningCard({
       <Text style={listen.pregunta}>{pregunta.enunciado}</Text>
 
       <Text style={listen.inputLabel}>Tu respuesta:</Text>
-      <TextInput
+      <CampoTexto
         style={[listen.input, isAnswered && { opacity: 0.6 }]}
         value={respuesta}
         onChangeText={setRespuesta}

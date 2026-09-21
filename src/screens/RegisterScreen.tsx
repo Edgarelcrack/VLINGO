@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform,
+  StyleSheet, Platform,
   ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
+import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { TipoUsuario } from '../types';
@@ -16,6 +17,7 @@ const AMBER = '#F0A500';
 const BLUE  = '#3A7BD5';
 
 export default function RegisterScreen({ navigation }: any) {
+  const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
   const { signUp } = useAuth();
   const [name, setName]             = useState('');
   const [email, setEmail]           = useState('');
@@ -72,13 +74,11 @@ export default function RegisterScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-      >
+      <View style={{ flex: 1 }}>
         <ScrollView
-          contentContainerStyle={s.content}
+          ref={scrollRef}
+          {...scrollProps}
+          contentContainerStyle={[s.content, { paddingBottom: 80 + espacioTeclado }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
@@ -252,7 +252,7 @@ export default function RegisterScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

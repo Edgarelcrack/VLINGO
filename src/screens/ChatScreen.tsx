@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TextInput,
-  TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform,
+  TouchableOpacity, StyleSheet, Platform,
   ActivityIndicator, Alert, Modal, FlatList,
   Animated, Easing,
 } from 'react-native';
+import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
@@ -513,13 +514,7 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        /* En Android el manifest ya usa adjustResize; añadir 'height' encima
-           duplica el manejo y colapsa la lista de mensajes. */
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
+      <KeyboardAvoider style={{ flex: 1 }}>
         <ScrollView
           ref={scrollRef}
           style={{ flex: 1 }}
@@ -671,7 +666,7 @@ export default function ChatScreen() {
             <Ionicons name="send" size={16} color="#fff" />
           </PressScale>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
 
       {/* ── Menú adjuntar (citar curso / pedir evaluación) ── */}
       <Modal

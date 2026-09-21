@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, ActivityIndicator, Alert,
-  KeyboardAvoidingView, Platform,
+  Platform,
 } from 'react-native';
+import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { crearCurso, getCurso, actualizarCurso } from '../services/cursosService';
@@ -21,6 +22,7 @@ const NIVEL_COLOR: Record<string, string> = {
 };
 
 export default function CrearCursoScreen({ navigation, route }: any) {
+  const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
   const cursoId: string | undefined = route?.params?.cursoId;
   const modoEdicion = !!cursoId;
   const insets = useSafeAreaInsets();
@@ -115,7 +117,7 @@ export default function CrearCursoScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={{ flex: 1 }}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
             <Ionicons name="arrow-back" size={22} color="#111" />
@@ -125,7 +127,9 @@ export default function CrearCursoScreen({ navigation, route }: any) {
         </View>
 
         <ScrollView
-          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}
+          ref={scrollRef}
+          {...scrollProps}
+          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 + espacioTeclado }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -218,7 +222,7 @@ export default function CrearCursoScreen({ navigation, route }: any) {
             }
           </TouchableOpacity>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

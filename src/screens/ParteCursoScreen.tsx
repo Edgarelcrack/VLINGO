@@ -97,7 +97,7 @@ export default function ParteCursoScreen({ navigation, route }: any) {
   const { user, refreshProfile } = useAuth();
   const insets = useSafeAreaInsets();
   // Mantiene visible el campo enfocado de los ejercicios al abrir el teclado
-  const { scrollRef, scrollProps, keyboardHeight } = useKeyboardAwareScroll();
+  const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
 
   const notificarXP = (monto: number) => {
     if (monto <= 0) return;
@@ -267,10 +267,11 @@ export default function ParteCursoScreen({ navigation, route }: any) {
           <View style={{ width: 32 }} />
         </View>
 
+        <View style={{ flex: 1 }}>
         <ScrollView
           ref={scrollRef}
           {...scrollProps}
-          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 + keyboardHeight }]}
+          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 + espacioTeclado }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Progress overview */}
@@ -407,6 +408,7 @@ export default function ParteCursoScreen({ navigation, route }: any) {
 
           <ChatShortcut navigation={navigation} />
         </ScrollView>
+        </View>
 
         {showCelebration && (
           <Animated.View style={[s.celebrationOverlay, { opacity: celebrationOpacity }]}>
@@ -434,10 +436,11 @@ export default function ParteCursoScreen({ navigation, route }: any) {
         <View style={{ width: 32 }} />
       </View>
 
+      <View style={{ flex: 1 }}>
       <ScrollView
         ref={scrollRef}
         {...scrollProps}
-        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 + keyboardHeight }]}
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 + espacioTeclado }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Lesson hero */}
@@ -488,6 +491,7 @@ export default function ParteCursoScreen({ navigation, route }: any) {
         )}
         <ChatShortcut navigation={navigation} />
       </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }

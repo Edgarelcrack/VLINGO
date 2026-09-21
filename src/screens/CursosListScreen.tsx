@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
   StyleSheet, ActivityIndicator, RefreshControl, Alert,
-  KeyboardAvoidingView, Platform,
+  Platform,
 } from 'react-native';
+import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -391,7 +392,7 @@ function FiltroModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoider style={{ flex: 1 }}>
         <TouchableOpacity style={f.backdrop} activeOpacity={1} onPress={onClose} />
         <View style={[f.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <View style={f.handle} />
@@ -448,7 +449,7 @@ function FiltroModal({
             <Text style={f.applyTxt}>Aplicar filtros</Text>
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
     </Modal>
   );
 }

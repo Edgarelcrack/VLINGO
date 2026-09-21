@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, Modal,
-  ActivityIndicator, Animated, Easing, RefreshControl, KeyboardAvoidingView,
+  ActivityIndicator, Animated, Easing, RefreshControl,
 } from 'react-native';
+import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -302,9 +303,9 @@ export default function PerfilScreen({ navigation }: any) {
 
       {/* Modal código de invitación */}
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
-        {/* El adjustResize del manifest no alcanza al contenido de un Modal,
-            así que aquí el KeyboardAvoidingView sí hace falta. */}
-        <KeyboardAvoidingView style={m.overlay} behavior="padding">
+        {/* Con edge-to-edge el teclado es un inset y no redimensiona nada,
+            menos aún dentro de un Modal: el hueco lo reservamos nosotros. */}
+        <KeyboardAvoider style={m.overlay}>
           <View style={m.card}>
             <View style={m.iconCircle}>
               <Ionicons name="key" size={22} color={NAVY} />
@@ -335,7 +336,7 @@ export default function PerfilScreen({ navigation }: any) {
               <Text style={m.cancelTxt}>Cancelar</Text>
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardAvoider>
       </Modal>
     </SafeAreaView>
   );

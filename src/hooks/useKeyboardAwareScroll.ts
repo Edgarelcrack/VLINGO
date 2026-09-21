@@ -1,74 +1,87 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Keyboard,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
   TextInput,
 } from 'react-native';
+import { useTecladoEnfoque } from './useTecladoEnfoque';
+
+/** Separación entre el campo y el borde del teclado. */
+const MARGEN = 8;
 
 /**
- * Mantiene visible el TextInput enfocado cuando aparece el teclado.
+ * Espera entre reservar el recorrido y desplazar.
  *
- * En Android el manifest usa `adjustResize`, así que la ventana se encoge al
- * abrir el teclado — pero nada desplaza el campo enfocado dentro del ScrollView.
- * Si el input queda en la mitad inferior, el teclado lo tapa y el usuario
- * escribe sin ver lo que escribe.
+ * Es imprescindible: si desplazamos en el mismo instante en que añadimos el
+ * paddingBottom, ese recorrido todavía no existe y Android recorta el scroll al
+ * máximo disponible. Lo sufría justo el último campo del formulario, que es el
+ * que más recorrido necesita.
+ */
+const ESPERA_RECORRIDO_MS = 90;
+
+/**
+ * Deja el campo enfocado justo encima del teclado, sin encoger la pantalla.
+ *
+ * El ScrollView conserva toda su altura y el contenido pasa por detrás del
+ * teclado (encogerlo dejaba una franja muerta). Dos fases:
+ *
+ *   1. `espacioTeclado` se suma al paddingBottom del CONTENIDO, para que haya
+ *      recorrido aunque el campo sea el último del formulario.
+ *   2. Ya con ese recorrido disponible, desplazamos el campo al borde del
+ *      teclado — al abrirse y al pasar de un campo a otro.
  *
  * Uso:
- *   const { scrollRef, scrollProps, keyboardHeight } = useKeyboardAwareScroll();
+ *   const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
  *   <ScrollView
  *     ref={scrollRef}
  *     {...scrollProps}
- *     contentContainerStyle={{ paddingBottom: base + keyboardHeight }}
+ *     contentContainerStyle={[s.content, { paddingBottom: 24 + espacioTeclado }]}
  *   />
- *
- * El `paddingBottom` extra es imprescindible: sin él, un input que sea el
- * último elemento no tiene hacia dónde desplazarse.
  */
-export function useKeyboardAwareScroll(margen = 24) {
+export function useKeyboardAwareScroll() {
   const scrollRef = useRef<ScrollView>(null);
   const offsetY   = useRef(0);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const temporizadorRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [espacioTeclado, setEspacioTeclado] = useState(0);
 
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     offsetY.current = e.nativeEvent.contentOffset.y;
   }, []);
 
-  useEffect(() => {
-    const mostrar = Keyboard.addListener('keyboardDidShow', e => {
-      setKeyboardHeight(e.endCoordinates.height);
+  useEffect(() => () => {
+    if (temporizadorRef.current) clearTimeout(temporizadorRef.current);
+  }, []);
 
+  useTecladoEnfoque(estado => {
+    if (temporizadorRef.current) clearTimeout(temporizadorRef.current);
+
+    if (!estado) { setEspacioTeclado(0); return; }
+
+    // Fase 1: reservar recorrido
+    setEspacioTeclado(estado.altura);
+
+    // Fase 2: desplazar, ya con el recorrido aplicado
+    temporizadorRef.current = setTimeout(() => {
       const scroll = scrollRef.current;
-      const input  = TextInput.State.currentlyFocusedInput?.();
-      if (!scroll || !input) return;
+      const campo  = TextInput.State.currentlyFocusedInput?.();
+      if (!scroll || !campo) return;
 
-      const tecladoTop = e.endCoordinates.screenY;
-
-      // measureInWindow puede fallar si el nodo se desmontó entre medias
       try {
-        input.measureInWindow((_x, y, _w, alto) => {
-          const invasion = y + alto + margen - tecladoTop;
-          if (invasion > 0) {
-            scroll.scrollTo({ y: offsetY.current + invasion, animated: true });
+        campo.measureInWindow((_x, y, _w, alto) => {
+          // Solo si el teclado lo tapa; un campo que ya se ve no se mueve.
+          const falta = y + alto + MARGEN - estado.borde;
+          if (falta > 0) {
+            scroll.scrollTo({ y: offsetY.current + falta, animated: true });
           }
         });
       } catch {}
-    });
-
-    const ocultar = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      mostrar.remove();
-      ocultar.remove();
-    };
-  }, [margen]);
+    }, ESPERA_RECORRIDO_MS);
+  });
 
   return {
     scrollRef,
-    keyboardHeight,
+    espacioTeclado,
     scrollProps: {
       onScroll,
       scrollEventThrottle: 16,

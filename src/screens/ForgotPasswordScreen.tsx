@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform,
+  StyleSheet, Platform,
   ScrollView, ActivityIndicator,
 } from 'react-native';
+import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,6 +16,7 @@ const RED   = '#E05A4E';
 type Step = 'form' | 'sent';
 
 export default function ForgotPasswordScreen({ navigation }: any) {
+  const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
   const { resetPassword } = useAuth();
   const [email, setEmail]     = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,13 +36,11 @@ export default function ForgotPasswordScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-      >
+      <View style={{ flex: 1 }}>
         <ScrollView
-          contentContainerStyle={s.content}
+          ref={scrollRef}
+          {...scrollProps}
+          contentContainerStyle={[s.content, { paddingBottom: 32 + espacioTeclado }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
@@ -129,7 +129,7 @@ export default function ForgotPasswordScreen({ navigation }: any) {
           )}
 
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

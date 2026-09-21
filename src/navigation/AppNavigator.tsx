@@ -194,10 +194,6 @@ function LoadingScreen() {
   );
 }
 
-/**
- * Salida cuando el perfil no carga. Sin esto, un fallo de red al abrir la app
- * dejaba al usuario en la pantalla de carga indefinidamente, sin mensaje.
- */
 function ProfileErrorScreen({
   mensaje,
   onReintentar,
@@ -256,8 +252,6 @@ function RootNavigator() {
   if (loading) return <LoadingScreen />;
   if (!session) return <AuthStack />;
 
-  // Si hay sesión pero el perfil aún no se ha cargado, esperamos antes de
-  // decidir si mostrar el test o las tabs (evita un flash de AppTabs).
   if (!userProfile) {
     if (profileError) {
       return (
@@ -271,8 +265,6 @@ function RootNavigator() {
     return <LoadingScreen />;
   }
 
-  // Solo estudiantes con nivel === null deben hacer el test de nivelación.
-  // Profesores y administradores nunca entran aquí.
   const needsPlacement =
     userProfile.tipo === 'estudiante' && userProfile.nivel === null;
   if (needsPlacement) return <PlacementScreen />;

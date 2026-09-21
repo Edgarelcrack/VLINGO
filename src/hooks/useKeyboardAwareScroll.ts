@@ -7,38 +7,12 @@ import {
 } from 'react-native';
 import { useTecladoEnfoque } from './useTecladoEnfoque';
 
-/** Separación entre el campo y el borde del teclado. */
+
 const MARGEN = 8;
 
-/**
- * Espera entre reservar el recorrido y desplazar.
- *
- * Es imprescindible: si desplazamos en el mismo instante en que añadimos el
- * paddingBottom, ese recorrido todavía no existe y Android recorta el scroll al
- * máximo disponible. Lo sufría justo el último campo del formulario, que es el
- * que más recorrido necesita.
- */
 const ESPERA_RECORRIDO_MS = 90;
 
-/**
- * Deja el campo enfocado justo encima del teclado, sin encoger la pantalla.
- *
- * El ScrollView conserva toda su altura y el contenido pasa por detrás del
- * teclado (encogerlo dejaba una franja muerta). Dos fases:
- *
- *   1. `espacioTeclado` se suma al paddingBottom del CONTENIDO, para que haya
- *      recorrido aunque el campo sea el último del formulario.
- *   2. Ya con ese recorrido disponible, desplazamos el campo al borde del
- *      teclado — al abrirse y al pasar de un campo a otro.
- *
- * Uso:
- *   const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
- *   <ScrollView
- *     ref={scrollRef}
- *     {...scrollProps}
- *     contentContainerStyle={[s.content, { paddingBottom: 24 + espacioTeclado }]}
- *   />
- */
+
 export function useKeyboardAwareScroll() {
   const scrollRef = useRef<ScrollView>(null);
   const offsetY   = useRef(0);

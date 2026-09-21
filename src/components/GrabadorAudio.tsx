@@ -10,7 +10,7 @@ const NAVY  = '#2B4C72';
 const GREEN = '#2E7D52';
 const RED   = '#E05A4E';
 
-/** Tope de duración: una grabación muy larga hace fallar la subida (timeout 30s). */
+
 const MAX_SEGUNDOS = 300;
 
 type Estado = 'idle' | 'grabando' | 'grabado' | 'subiendo';
@@ -21,11 +21,6 @@ const mmss = (total: number) => {
   return `${m}:${s}`;
 };
 
-/**
- * Permite al profesor grabar su propio audio, escucharlo antes de decidir
- * (preview) y repetirlo si no le convence. Solo sube a Supabase cuando
- * confirma, para no llenar el bucket de descartes.
- */
 export default function GrabadorAudio({
   onSubido,
   disabled,
@@ -51,7 +46,6 @@ export default function GrabadorAudio({
     }
   }, []);
 
-  // Limpieza al desmontar: sin esto el micrófono puede quedarse tomado
   useEffect(() => {
     montadoRef.current = true;
     return () => {
@@ -211,7 +205,7 @@ export default function GrabadorAudio({
     setEstado('idle');
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // Render
 
   if (estado === 'subiendo') {
     return (

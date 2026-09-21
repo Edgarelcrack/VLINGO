@@ -1,13 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { Keyboard, TextInput } from 'react-native';
 
-/**
- * Cambiar de un campo a otro con el teclado ya abierto no emite ningún evento,
- * así que vigilamos cuál está enfocado para poder recolocar también entonces.
- */
+
 const INTERVALO_MS = 250;
 
-/** Margen para medir con el layout ya asentado tras abrirse el teclado. */
 const ESPERA_MS = 80;
 
 export type EstadoTeclado = {
@@ -17,13 +13,7 @@ export type EstadoTeclado = {
   altura: number;
 };
 
-/**
- * Avisa cada vez que hay que recolocar por el teclado: al abrirse, al cambiar
- * de campo con él abierto, y al cerrarse (con `null`).
- *
- * Es la base común del ajuste: quien lo use mide el campo enfocado y decide si
- * lo sube o hace scroll.
- */
+
 export function useTecladoEnfoque(alRecolocar: (estado: EstadoTeclado | null) => void) {
   const cbRef = useRef(alRecolocar);
   useEffect(() => { cbRef.current = alRecolocar; }, [alRecolocar]);

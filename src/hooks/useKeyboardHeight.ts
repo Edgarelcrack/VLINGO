@@ -1,15 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Keyboard, Platform } from 'react-native';
 
-/**
- * Altura actual del teclado en píxeles (0 si está cerrado).
- *
- * Este proyecto tiene edge-to-edge activado (android/gradle.properties:
- * edgeToEdgeEnabled=true). Con edge-to-edge, `adjustResize` ya NO redimensiona
- * la ventana: el teclado pasa a ser un inset y la app sigue ocupando toda la
- * pantalla. Los eventos de teclado, en cambio, siguen informando la altura
- * correcta, así que son la base fiable para dejar hueco a mano.
- */
+
 export function useKeyboardHeight(): number {
   const [altura, setAltura] = useState(0);
 

@@ -24,14 +24,9 @@ type ApiError = { error: string; detail?: string };
 
 const REQUEST_TIMEOUT_MS = 20_000;
 
-/**
- * Un túnel caído no lanza excepción: Cloudflare responde con su propia página
- * de error. Por eso estos códigos también significan "esta URL ya no sirve".
- */
 const pareceTunelCaido = (status: number) =>
   status === 502 || status === 503 || status === 504 || status === 530;
 
-/** fetch no trae timeout: sin esto, una API colgada deja la app girando. */
 async function fetchConTimeout(url: string, init: RequestInit): Promise<Response> {
   const controlador = new AbortController();
   let expirado = false;

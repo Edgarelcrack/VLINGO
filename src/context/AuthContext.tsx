@@ -59,9 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       || errLower.includes('json object');
 
     if (!isNotFound) {
-      // Fallo real (red, permisos...). Antes se hacía return en silencio y la
-      // app se quedaba en el splash para siempre; ahora queda registrado para
-      // que RootNavigator pueda ofrecer reintentar.
+
       if (__DEV__) console.error('[AuthContext] fetchProfile:', error);
       setProfileError(error ?? 'No se pudo cargar tu perfil');
       return;

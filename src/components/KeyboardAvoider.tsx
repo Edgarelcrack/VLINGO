@@ -2,32 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StyleProp, TextInput, View, ViewStyle } from 'react-native';
 import { useTecladoEnfoque } from '../hooks/useTecladoEnfoque';
 
-/** Separación entre el campo y el borde del teclado. */
+
 const MARGEN = 8;
 
-/** Damos por bueno el ajuste con esta holgura, en píxeles. */
+
 const TOLERANCIA = 2;
 
-/**
- * Pasadas de refinamiento y espera entre ellas.
- *
- * Un bloque anclado abajo acierta a la primera y se detiene. Pero un contenido
- * centrado (el modal de Perfil) sube solo la mitad de lo que se le añade, así
- * que hace falta repetir hasta que el campo quede realmente en el borde.
- */
+
 const MAX_PASADAS = 8;
 const ESPERA_PASADA_MS = 50;
 
-/**
- * Sube el contenido lo justo para que el campo enfocado quede sobre el teclado.
- *
- * Para elementos anclados abajo (la barra del chat, las hojas de los editores,
- * los modales), que no pueden resolverlo con scroll.
- *
- * Mide el CAMPO ENFOCADO, no el contenedor: el contenedor llega hasta el fondo
- * de la pantalla y por debajo puede haber barra de pestañas o safe area, así
- * que reservaba de más y dejaba una franja vacía.
- */
+
 export default function KeyboardAvoider({
   children,
   style,

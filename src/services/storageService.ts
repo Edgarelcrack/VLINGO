@@ -51,15 +51,12 @@ export async function getStreak(): Promise<number> {
   return streak;
 }
 
-// ── Audio de ejercicios ───────────────────────────────────────────────────────
+// Audio de ejercicios
 
 const AUDIO_BUCKET = 'audio-ejercicios';
 const UPLOAD_TIMEOUT_MS = 30_000;
 
-/**
- * Sube un audio local (archivo elegido o grabación propia) al bucket y
- * devuelve su URL pública.
- */
+
 export async function subirAudioDesdeUri(
   uri: string,
   nombre: string,
@@ -106,7 +103,6 @@ export async function subirAudioDesdeUri(
   return { url: data.publicUrl, error: null };
 }
 
-/** El profesor elige un archivo de audio ya existente en su dispositivo. */
 export async function pickAndUploadAudio(): Promise<{ url: string | null; error: string | null }> {
   const result = await DocumentPicker.getDocumentAsync({
     type: ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/*'],

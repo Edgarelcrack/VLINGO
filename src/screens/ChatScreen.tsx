@@ -5,7 +5,6 @@ import {
   ActivityIndicator, Alert, Modal, FlatList,
   Animated, Easing,
 } from 'react-native';
-import CampoTexto from '../components/CampoTexto';
 import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -648,7 +647,7 @@ export default function ChatScreen() {
               color={inputEnabled ? '#2B4C72' : '#B0BEC5'}
             />
           </TouchableOpacity>
-          <CampoTexto
+          <TextInput
             style={s.input}
             value={input}
             onChangeText={setInput}

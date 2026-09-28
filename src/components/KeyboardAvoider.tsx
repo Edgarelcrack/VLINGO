@@ -1,19 +1,18 @@
-import React, { useRef, useState } from 'react';
-import { StyleProp, View, ViewStyle } from 'react-native';
-import { useTecladoEnfoque } from '../hooks/useTecladoEnfoque';
-import { obtenerCampoActivo } from './CampoTexto';
-
-/** Separación entre el campo y el borde del teclado. */
-const MARGEN = 8;
+import React from 'react';
+import { StyleProp, ViewStyle } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 /**
- * Sube el contenido lo justo para que el campo enfocado quede sobre el teclado.
+ * Sube el contenido lo justo para que no quede bajo el teclado.
  *
- * Para elementos anclados abajo (la barra del chat, las hojas de los editores),
+ * Para elementos anclados abajo (la barra del chat, las hojas de los modales),
  * que no pueden resolverlo con scroll.
  *
- * El ajuste es acumulativo (hueco actual + lo que falte), así que converge solo
- * y también corrige al pasar de un campo a otro con el teclado abierto.
+ * Con edge-to-edge (obligatorio en RN 0.81) Android ya no redimensiona la
+ * ventana al abrir el teclado, y los eventos `Keyboard` de React Native no son
+ * fiables para calcularlo a mano. react-native-keyboard-controller lee los
+ * insets del teclado de forma nativa (también dentro de un Modal) y reserva
+ * solo la parte del teclado que solapa esta vista.
  */
 export default function KeyboardAvoider({
   children,
@@ -22,29 +21,9 @@ export default function KeyboardAvoider({
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  const [hueco, setHueco] = useState(0);
-  const huecoRef = useRef(0);
-
-  const aplicar = (valor: number) => {
-    huecoRef.current = valor;
-    setHueco(valor);
-  };
-
-  useTecladoEnfoque(estado => {
-    if (!estado) { aplicar(0); return; }
-
-    const campo = obtenerCampoActivo();
-    if (!campo) return;
-
-    try {
-      campo.measureInWindow((_x, y, _w, alto) => {
-        const falta = y + alto + MARGEN - estado.borde;
-        const nuevo = Math.max(0, huecoRef.current + falta);
-        // Un píxel de tolerancia evita renders por redondeos
-        if (Math.abs(nuevo - huecoRef.current) > 1) aplicar(nuevo);
-      });
-    } catch {}
-  });
-
-  return <View style={[style, { paddingBottom: hueco }]}>{children}</View>;
+  return (
+    <KeyboardAvoidingView behavior="padding" style={style}>
+      {children}
+    </KeyboardAvoidingView>
+  );
 }

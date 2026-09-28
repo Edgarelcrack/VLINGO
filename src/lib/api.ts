@@ -21,26 +21,12 @@ export type HistoryMessage = {
 };
 
 type ApiError = { error: string; detail?: string };
+const ESTADOS_DE_PASARELA = new Set([502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 530]);
 
-const REQUEST_TIMEOUT_MS = 20_000;
-
-const pareceTunelCaido = (status: number) =>
-  status === 502 || status === 503 || status === 504 || status === 530;
-
-async function fetchConTimeout(url: string, init: RequestInit): Promise<Response> {
-  const controlador = new AbortController();
-  let expirado = false;
-  const corte = setTimeout(() => { expirado = true; controlador.abort(); }, REQUEST_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controlador.signal });
-  } catch (err) {
-    if (expirado) {
-      throw new Error('El servidor no respondió a tiempo. Comprueba que la API esté encendida.');
-    }
-    throw err;
-  } finally {
-    clearTimeout(corte);
-  }
+function pareceApiCaida(res: Response): boolean {
+  if (ESTADOS_DE_PASARELA.has(res.status)) return true;
+  const tipo = res.headers.get('content-type') ?? '';
+  return !res.ok && !tipo.includes('application/json');
 }
 
 async function pedir(path: string, init?: RequestInit): Promise<Response> {
@@ -52,36 +38,27 @@ async function pedir(path: string, init?: RequestInit): Promise<Response> {
     },
   };
 
-  // Primer intento con la URL vigente
-  let respuestaCaida: Response | null = null;
-  try {
-    const res = await fetchConTimeout(`${getApiBase()}${path}`, conCabeceras);
-    if (!pareceTunelCaido(res.status)) return res;
-    respuestaCaida = res;
-  } catch {
-    // Error de red o timeout: puede que la URL haya cambiado
-  }
+  const baseVieja = getApiBase();
+  let res: Response | null = null;
 
-  // Segundo intento con la URL recién leída de Supabase
-  const urlFresca = await refreshApiUrl();
   try {
-    return await fetchConTimeout(`${urlFresca}${path}`, conCabeceras);
-  } catch (err) {
-    // Si el primer intento al menos respondió, devolvemos esa respuesta para
-    // que el llamante muestre el error real en vez de uno de red.
-    if (respuestaCaida) return respuestaCaida;
-    throw err;
+    res = await fetch(`${baseVieja}${path}`, conCabeceras);
+    if (!pareceApiCaida(res)) return res;
+  } catch {
   }
+  const urlFresca = await refreshApiUrl();
+  if (res && urlFresca === baseVieja) return res;
+  return fetch(`${urlFresca}${path}`, conCabeceras);
 }
 
 async function leerError(res: Response): Promise<never> {
-  const err: ApiError = await res.json().catch(() => ({ error: 'Sin respuesta' }));
-
-  if (pareceTunelCaido(res.status)) {
+  if (pareceApiCaida(res)) {
     throw new Error(
-      'No se pudo contactar con la API. Comprueba que el servidor y el túnel estén encendidos.',
+      'No hay conexión con el servidor de VLINGO. Verifica que la API y el túnel estén encendidos.',
     );
   }
+
+  const err: ApiError = await res.json().catch(() => ({ error: 'Sin respuesta' }));
 
   if (res.status === 401) {
     throw new Error(

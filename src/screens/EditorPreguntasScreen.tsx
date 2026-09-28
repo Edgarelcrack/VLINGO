@@ -4,7 +4,6 @@ import {
   StyleSheet, ActivityIndicator, Alert, Modal,
   Platform,
 } from 'react-native';
-import CampoTexto from '../components/CampoTexto';
 import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -321,7 +320,7 @@ function PreguntaModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoider style={{ flex: 1 }}>
-        <TouchableOpacity style={m.backdrop} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={[m.backdrop, { minHeight: insets.top + 12 }]} activeOpacity={1} onPress={onClose} />
         <View style={[m.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <View style={m.sheetHandle} />
           <Text style={m.sheetTitle}>{titulo}</Text>
@@ -329,7 +328,7 @@ function PreguntaModal({
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 480 }}
+            style={{ maxHeight: 480, flexShrink: 1 }}
           >
             <Text style={m.label}>Tipo de pregunta</Text>
             <View style={m.tipoRow}>
@@ -360,7 +359,7 @@ function PreguntaModal({
               {tipo === 'pronunciacion' ? 'Frase a pronunciar' :
                tipo === 'listening'     ? 'Pregunta sobre el audio' : 'Enunciado'}
             </Text>
-            <CampoTexto
+            <TextInput
               style={[m.input, m.inputMulti]}
               value={enunciado}
               onChangeText={setEnunciado}
@@ -378,7 +377,7 @@ function PreguntaModal({
             {tipo === 'pronunciacion' ? (
               <>
                 <Text style={m.label}>Transcripción esperada</Text>
-                <CampoTexto
+                <TextInput
                   style={m.input}
                   value={transcripcionEsperada}
                   onChangeText={setTranscripcion}
@@ -431,7 +430,7 @@ function PreguntaModal({
                   </>
                 )}
                 <Text style={m.label}>Respuesta esperada del estudiante</Text>
-                <CampoTexto
+                <TextInput
                   style={[m.input, m.inputMulti]}
                   value={transcripcionEsperada}
                   onChangeText={setTranscripcion}
@@ -463,7 +462,7 @@ function PreguntaModal({
                           ? <Ionicons name="checkmark" size={14} color="#fff" />
                           : <Text style={m.radioTxt}>{LETRAS[idx]}</Text>}
                       </TouchableOpacity>
-                      <CampoTexto
+                      <TextInput
                         style={[m.input, { flex: 1, marginBottom: 0 }]}
                         value={op}
                         onChangeText={(v) => setOpcion(idx, v)}
@@ -575,6 +574,8 @@ const m = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
     backgroundColor: '#fff',
+    // Con el teclado abierto la hoja se encoge en vez de salirse por arriba
+    flexShrink: 1,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
   },

@@ -3,7 +3,6 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput, Modal,
   ActivityIndicator, Animated, Easing, RefreshControl,
 } from 'react-native';
-import CampoTexto from '../components/CampoTexto';
 import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -313,7 +312,7 @@ export default function PerfilScreen({ navigation }: any) {
             </View>
             <Text style={m.title}>Activar rol de Profesor</Text>
             <Text style={m.sub}>Ingresa tu código de invitación</Text>
-            <CampoTexto
+            <TextInput
               style={m.input}
               placeholder="Código de invitación"
               placeholderTextColor="#BBB"

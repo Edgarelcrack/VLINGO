@@ -4,7 +4,6 @@ import {
   StyleSheet, ActivityIndicator, Alert, Modal,
   Platform,
 } from 'react-native';
-import CampoTexto from '../components/CampoTexto';
 import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -335,7 +334,7 @@ function BloqueModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoider style={{ flex: 1 }}>
-        <TouchableOpacity style={m.backdrop} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={[m.backdrop, { minHeight: insets.top + 12 }]} activeOpacity={1} onPress={onClose} />
         <View style={[m.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <View style={m.handle} />
           <Text style={m.title}>
@@ -345,10 +344,10 @@ function BloqueModal({
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 420 }}
+            style={{ maxHeight: 420, flexShrink: 1 }}
           >
             {tipo === 'texto' && (
-              <CampoTexto
+              <TextInput
                 style={[m.input, m.inputMulti]}
                 value={texto}
                 onChangeText={setTexto}
@@ -365,7 +364,7 @@ function BloqueModal({
                 {items.map((it, i) => (
                   <View key={i} style={m.itemRow}>
                     <Text style={m.itemBullet}>•</Text>
-                    <CampoTexto
+                    <TextInput
                       style={[m.input, { flex: 1, marginBottom: 0 }]}
                       value={it}
                       onChangeText={(v) => setItems(prev => prev.map((x, idx) => idx === i ? v : x))}
@@ -395,7 +394,7 @@ function BloqueModal({
             {tipo === 'ejercicio' && (
               <>
                 <Text style={m.label}>Pregunta</Text>
-                <CampoTexto
+                <TextInput
                   style={[m.input, m.inputMulti]}
                   value={pregunta}
                   onChangeText={setPregunta}
@@ -405,7 +404,7 @@ function BloqueModal({
                   textAlignVertical="top"
                 />
                 <Text style={m.label}>Respuesta sugerida (opcional)</Text>
-                <CampoTexto
+                <TextInput
                   style={m.input}
                   value={respuesta}
                   onChangeText={setRespuesta}
@@ -514,6 +513,8 @@ const m = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
     backgroundColor: '#fff',
+    // Con el teclado abierto la hoja se encoge en vez de salirse por arriba
+    flexShrink: 1,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
   },

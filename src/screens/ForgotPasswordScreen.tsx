@@ -4,8 +4,7 @@ import {
   StyleSheet, Platform,
   ScrollView, ActivityIndicator,
 } from 'react-native';
-import CampoTexto from '../components/CampoTexto';
-import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,7 +16,6 @@ const RED   = '#E05A4E';
 type Step = 'form' | 'sent';
 
 export default function ForgotPasswordScreen({ navigation }: any) {
-  const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
   const { resetPassword } = useAuth();
   const [email, setEmail]     = useState('');
   const [loading, setLoading] = useState(false);
@@ -38,10 +36,9 @@ export default function ForgotPasswordScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
       <View style={{ flex: 1 }}>
-        <ScrollView
-          ref={scrollRef}
-          {...scrollProps}
-          contentContainerStyle={[s.content, { paddingBottom: 32 + espacioTeclado }]}
+        <KeyboardAwareScrollView
+          bottomOffset={16}
+          contentContainerStyle={[s.content, { paddingBottom: 32 }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
@@ -69,7 +66,7 @@ export default function ForgotPasswordScreen({ navigation }: any) {
               <Text style={s.label}>Correo electrónico</Text>
               <View style={[s.inputWrap, error ? s.inputError : null]}>
                 <Text style={s.inputIcon}></Text>
-                <CampoTexto
+                <TextInput
                   style={s.input}
                   placeholder="correo@ejemplo.com"
                   placeholderTextColor="#BBB"
@@ -129,7 +126,7 @@ export default function ForgotPasswordScreen({ navigation }: any) {
             </View>
           )}
 
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
     </SafeAreaView>
   );

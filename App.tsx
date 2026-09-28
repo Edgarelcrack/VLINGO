@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AuthProvider } from './src/context/AuthContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { bootstrapApiUrl } from './src/lib/config';
@@ -25,10 +26,12 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <StatusBar style="dark" backgroundColor="#F2F4F6" />
-        <AppNavigator />
-      </AuthProvider>
+      <KeyboardProvider>
+        <AuthProvider>
+          <StatusBar style="dark" backgroundColor="#F2F4F6" />
+          <AppNavigator />
+        </AuthProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

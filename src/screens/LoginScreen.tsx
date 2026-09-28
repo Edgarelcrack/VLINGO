@@ -4,8 +4,7 @@ import {
   StyleSheet, Platform,
   ScrollView, ActivityIndicator, Alert,
 } from 'react-native';
-import CampoTexto from '../components/CampoTexto';
-import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,7 +14,6 @@ const WHITE  = '#fff';
 const RED    = '#E05A4E';
 
 export default function LoginScreen({ navigation }: any) {
-  const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
   const { signIn } = useAuth();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
@@ -48,10 +46,9 @@ export default function LoginScreen({ navigation }: any) {
   return (
     <SafeAreaView style={s.safe} edges={['top', 'bottom']}>
       <View style={{ flex: 1 }}>
-        <ScrollView
-          ref={scrollRef}
-          {...scrollProps}
-          contentContainerStyle={[s.content, { paddingBottom: 80 + espacioTeclado }]}
+        <KeyboardAwareScrollView
+          bottomOffset={16}
+          contentContainerStyle={[s.content, { paddingBottom: 80 }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
           showsVerticalScrollIndicator={false}
@@ -70,7 +67,7 @@ export default function LoginScreen({ navigation }: any) {
             <Text style={s.label}>Correo electrónico</Text>
             <View style={[s.inputWrap, errors.email ? s.inputError : null]}>
               <Text style={s.inputIcon}></Text>
-              <CampoTexto
+              <TextInput
                 style={s.input}
                 placeholder="correo@ejemplo.com"
                 placeholderTextColor="#BBB"
@@ -87,7 +84,7 @@ export default function LoginScreen({ navigation }: any) {
             <Text style={s.label}>Contraseña</Text>
             <View style={[s.inputWrap, errors.password ? s.inputError : null]}>
               <Text style={s.inputIcon}></Text>
-              <CampoTexto
+              <TextInput
                 style={s.input}
                 placeholder="Tu contraseña"
                 placeholderTextColor="#BBB"
@@ -130,7 +127,7 @@ export default function LoginScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
 
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
     </SafeAreaView>
   );

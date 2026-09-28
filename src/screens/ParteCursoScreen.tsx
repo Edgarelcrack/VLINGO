@@ -6,7 +6,6 @@ import {
   StyleSheet, ActivityIndicator, ToastAndroid, Platform, Alert,
   LayoutAnimation, TextInput, Keyboard,
 } from 'react-native';
-import CampoTexto from '../components/CampoTexto';
 import { Audio } from 'expo-av';
 let SpeechModule: any = null;
 try { SpeechModule = require('expo-speech-recognition').ExpoSpeechRecognitionModule; } catch {}
@@ -20,7 +19,7 @@ import {
 import { getPreguntasPorSeccion } from '../services/preguntasService';
 import { incrementarPuntos } from '../services/puntuacionService';
 import { Seccion, ProgresoUsuario, EstadoSeccion, ContenidoBloque, Pregunta } from '../types';
-import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 type SeccionConEstado = Seccion & { estado: EstadoSeccion };
 
@@ -98,7 +97,6 @@ export default function ParteCursoScreen({ navigation, route }: any) {
   const { user, refreshProfile } = useAuth();
   const insets = useSafeAreaInsets();
   // Mantiene visible el campo enfocado de los ejercicios al abrir el teclado
-  const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
 
   const notificarXP = (monto: number) => {
     if (monto <= 0) return;
@@ -269,10 +267,10 @@ export default function ParteCursoScreen({ navigation, route }: any) {
         </View>
 
         <View style={{ flex: 1 }}>
-        <ScrollView
-          ref={scrollRef}
-          {...scrollProps}
-          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 + espacioTeclado }]}
+        <KeyboardAwareScrollView
+          bottomOffset={16}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 }]}
           showsVerticalScrollIndicator={false}
         >
           {/* Progress overview */}
@@ -408,7 +406,7 @@ export default function ParteCursoScreen({ navigation, route }: any) {
           })}
 
           <ChatShortcut navigation={navigation} />
-        </ScrollView>
+        </KeyboardAwareScrollView>
         </View>
 
         {showCelebration && (
@@ -438,10 +436,10 @@ export default function ParteCursoScreen({ navigation, route }: any) {
       </View>
 
       <View style={{ flex: 1 }}>
-      <ScrollView
-        ref={scrollRef}
-        {...scrollProps}
-        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 + espacioTeclado }]}
+      <KeyboardAwareScrollView
+        bottomOffset={16}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Lesson hero */}
@@ -491,7 +489,7 @@ export default function ParteCursoScreen({ navigation, route }: any) {
           </View>
         )}
         <ChatShortcut navigation={navigation} />
-      </ScrollView>
+      </KeyboardAwareScrollView>
       </View>
     </SafeAreaView>
   );
@@ -794,7 +792,7 @@ function CompletarFraseCard({
       </View>
 
       <Text style={write.inputLabel}>Completa el espacio en blanco:</Text>
-      <CampoTexto
+      <TextInput
         style={[write.input, isAnswered && { opacity: 0.6 }]}
         value={respuesta}
         onChangeText={setRespuesta}
@@ -967,7 +965,7 @@ function ListeningCard({
       <Text style={listen.pregunta}>{pregunta.enunciado}</Text>
 
       <Text style={listen.inputLabel}>Tu respuesta:</Text>
-      <CampoTexto
+      <TextInput
         style={[listen.input, isAnswered && { opacity: 0.6 }]}
         value={respuesta}
         onChangeText={setRespuesta}

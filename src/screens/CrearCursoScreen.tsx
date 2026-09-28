@@ -4,8 +4,7 @@ import {
   StyleSheet, ScrollView, ActivityIndicator, Alert,
   Platform,
 } from 'react-native';
-import CampoTexto from '../components/CampoTexto';
-import { useKeyboardAwareScroll } from '../hooks/useKeyboardAwareScroll';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { crearCurso, getCurso, actualizarCurso } from '../services/cursosService';
@@ -23,7 +22,6 @@ const NIVEL_COLOR: Record<string, string> = {
 };
 
 export default function CrearCursoScreen({ navigation, route }: any) {
-  const { scrollRef, scrollProps, espacioTeclado } = useKeyboardAwareScroll();
   const cursoId: string | undefined = route?.params?.cursoId;
   const modoEdicion = !!cursoId;
   const insets = useSafeAreaInsets();
@@ -127,10 +125,9 @@ export default function CrearCursoScreen({ navigation, route }: any) {
           <View style={{ width: 32 }} />
         </View>
 
-        <ScrollView
-          ref={scrollRef}
-          {...scrollProps}
-          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 + espacioTeclado }]}
+        <KeyboardAwareScrollView
+          bottomOffset={16}
+          contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -149,7 +146,7 @@ export default function CrearCursoScreen({ navigation, route }: any) {
           <Text style={s.label}>Título del curso *</Text>
           <View style={[s.inputWrap, errors.titulo && s.inputError]}>
             <Ionicons name="bookmark-outline" size={16} color="#999" />
-            <CampoTexto
+            <TextInput
               style={s.input}
               placeholder="Ej: Business English Fundamentals"
               placeholderTextColor="#BBB"
@@ -163,7 +160,7 @@ export default function CrearCursoScreen({ navigation, route }: any) {
 
           <Text style={s.label}>Descripción</Text>
           <View style={[s.inputWrap, s.textAreaWrap]}>
-            <CampoTexto
+            <TextInput
               style={[s.input, s.textArea]}
               placeholder="¿De qué trata este curso? ¿Qué aprenderá el estudiante?"
               placeholderTextColor="#BBB"
@@ -222,7 +219,7 @@ export default function CrearCursoScreen({ navigation, route }: any) {
               )
             }
           </TouchableOpacity>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
     </SafeAreaView>
   );

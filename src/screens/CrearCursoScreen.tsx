@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, ActivityIndicator, Alert,
-  KeyboardAvoidingView, Platform,
+  Platform,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { crearCurso, getCurso, actualizarCurso } from '../services/cursosService';
@@ -115,7 +116,7 @@ export default function CrearCursoScreen({ navigation, route }: any) {
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={{ flex: 1 }}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
             <Ionicons name="arrow-back" size={22} color="#111" />
@@ -124,7 +125,8 @@ export default function CrearCursoScreen({ navigation, route }: any) {
           <View style={{ width: 32 }} />
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
+          bottomOffset={16}
           contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 32 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -217,8 +219,8 @@ export default function CrearCursoScreen({ navigation, route }: any) {
               )
             }
           </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAwareScrollView>
+      </View>
     </SafeAreaView>
   );
 }

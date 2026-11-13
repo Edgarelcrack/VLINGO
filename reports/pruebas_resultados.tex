@@ -1,0 +1,124 @@
+% ==========================================================================
+% Archivo generado automáticamente por scripts/generar-tabla-pruebas.js
+% NO lo edites a mano: vuelve a ejecutar  npm run test:report
+% Requiere en el preámbulo:  \usepackage{longtable}  y  \usepackage{array}
+% ==========================================================================
+\begin{table}[H]
+\centering
+\caption{Entorno de ejecución de las pruebas unitarias}
+\label{tab:pruebas-entorno}
+\begin{tabular}{ll}
+\hline
+\textbf{Elemento} & \textbf{Valor} \\ \hline
+Fecha de ejecución & 24 de octubre de 2026 a las 5:24 p. m. \\
+Sistema operativo & Windows\_NT 10.0.19045 \\
+Node.js & v20.20.2 \\
+Jest & 30.5.2 \\
+jest-expo & 54.0.18 \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Resumen de resultados por conjunto de pruebas}
+\label{tab:pruebas-resumen}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.36\textwidth}cccc}
+\hline
+\textbf{Conjunto} & \textbf{Pruebas} & \textbf{Aprobadas} & \textbf{Falladas} & \textbf{Tiempo (s)} \\ \hline
+NIV --- Nivelación inicial del aprendiz & 12 & 12 & 0 & 0,08 \\
+RAC --- Racha de uso diario & 13 & 13 & 0 & 0,09 \\
+PRO --- Progreso del curso y completitud en cascada & 9 & 9 & 0 & 0,03 \\
+\hline
+\textbf{Total} & \textbf{34} & \textbf{34} & \textbf{0} & \textbf{0,20} \\ \hline
+\end{tabular}
+\end{table}
+
+{\small
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.09\textwidth}>{\raggedright\arraybackslash}p{0.35\textwidth}>{\raggedright\arraybackslash}p{0.32\textwidth}>{\raggedright\arraybackslash}p{0.10\textwidth}}
+\caption{Casos de prueba del conjunto NIV: nivelación inicial del aprendiz (Sección~\ref{sec:nivelacion})}\label{tab:pruebas-NIV}\\
+\hline
+\textbf{ID} & \textbf{Entrada o condición} & \textbf{Resultado esperado} & \textbf{Estado} \\ \hline
+\endfirsthead
+\caption[]{Casos de prueba del conjunto NIV: nivelación inicial del aprendiz (Sección~\ref{sec:nivelacion}) (continuación)}\\
+\hline
+\textbf{ID} & \textbf{Entrada o condición} & \textbf{Resultado esperado} & \textbf{Estado} \\ \hline
+\endhead
+\hline \endfoot
+NIV-01 & Banco de preguntas completo & 16 preguntas, 4 por cada nivel (A1, A2, B1 y B2) & Aprobó \\ \hline
+NIV-02 & Estructura de cada pregunta & 4 opciones y respuesta correcta con índice entre 0 y 3 & Aprobó \\ \hline
+NIV-03 & Identificadores de las preguntas & Todos distintos, sin duplicados & Aprobó \\ \hline
+NIV-04 & Ninguna respuesta registrada & Nivel A1 (nivel mínimo) & Aprobó \\ \hline
+NIV-05 & 4 de 4 aciertos en todos los niveles & Nivel B2 (nivel máximo) & Aprobó \\ \hline
+NIV-06 & 0 aciertos en todos los niveles & Nivel A1 (nivel mínimo) & Aprobó \\ \hline
+NIV-07 & A1 completo y 3 de 4 aciertos en A2 (75 \%) & Nivel A2, supera el umbral del 60 \% & Aprobó \\ \hline
+NIV-08 & A1 completo y 2 de 4 aciertos en A2 (50 \%) & Nivel A1, no supera el umbral del 60 \% & Aprobó \\ \hline
+NIV-09 & A1 y A2 completos, 3 de 4 en B1 y 1 de 4 en B2 & Nivel B1 & Aprobó \\ \hline
+NIV-10 & 1 de 4 en A2 con B1 y B2 perfectos & Nivel A1, no se saltan niveles & Aprobó \\ \hline
+NIV-11 & Dos preguntas de B2 sin responder & Se cuentan como incorrectas: Nivel B1 & Aprobó \\ \hline
+NIV-12 & A1 completo y una respuesta con identificador inexistente & La respuesta extra se ignora: Nivel A1 & Aprobó \\ \hline
+\end{longtable}
+}
+
+{\small
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.09\textwidth}>{\raggedright\arraybackslash}p{0.35\textwidth}>{\raggedright\arraybackslash}p{0.32\textwidth}>{\raggedright\arraybackslash}p{0.10\textwidth}}
+\caption{Casos de prueba del conjunto RAC: racha de uso diario}\label{tab:pruebas-RAC}\\
+\hline
+\textbf{ID} & \textbf{Entrada o condición} & \textbf{Resultado esperado} & \textbf{Estado} \\ \hline
+\endfirsthead
+\caption[]{Casos de prueba del conjunto RAC: racha de uso diario (continuación)}\\
+\hline
+\textbf{ID} & \textbf{Entrada o condición} & \textbf{Resultado esperado} & \textbf{Estado} \\ \hline
+\endhead
+\hline \endfoot
+RAC-01 & Sin fechas registradas & Racha = 0 & Aprobó \\ \hline
+RAC-02 & Actividad únicamente hoy & Racha = 1 & Aprobó \\ \hline
+RAC-03 & Actividad hoy, ayer y anteayer & Racha = 3 & Aprobó \\ \hline
+RAC-04 & Actividad ayer y anteayer, aún sin entrar hoy & Racha = 2, se conserva & Aprobó \\ \hline
+RAC-05 & Último día activo hace dos días & Racha = 0, se rompe & Aprobó \\ \hline
+RAC-06 & Actividad el 20, 23 y 24 de octubre (un hueco) & Racha = 2, cuenta desde el hueco & Aprobó \\ \hline
+RAC-07 & Fechas guardadas desordenadas & Racha = 3, se ordenan antes de contar & Aprobó \\ \hline
+RAC-08 & Actividad el 30 y 31 de octubre y el 1 de noviembre & Racha = 3, cruza el cambio de mes & Aprobó \\ \hline
+RAC-09 & Actividad el 31 de diciembre y el 1 de enero & Racha = 2, cruza el cambio de año & Aprobó \\ \hline
+RAC-10 & Primer registro de uso del día & Se guarda la fecha de hoy & Aprobó \\ \hline
+RAC-11 & Tres registros de uso en el mismo día & Una sola fecha guardada, sin duplicados & Aprobó \\ \hline
+RAC-12 & 400 fechas almacenadas más el registro de hoy & Se conservan 365 fechas y la última es hoy & Aprobó \\ \hline
+RAC-13 & Uso a las 21:00 de Bogotá (02:00 UTC del día siguiente) & Se registra la fecha UTC, limitación conocida & Aprobó \\ \hline
+\end{longtable}
+}
+
+{\small
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.09\textwidth}>{\raggedright\arraybackslash}p{0.35\textwidth}>{\raggedright\arraybackslash}p{0.32\textwidth}>{\raggedright\arraybackslash}p{0.10\textwidth}}
+\caption{Casos de prueba del conjunto PRO: progreso del curso y completitud en cascada}\label{tab:pruebas-PRO}\\
+\hline
+\textbf{ID} & \textbf{Entrada o condición} & \textbf{Resultado esperado} & \textbf{Estado} \\ \hline
+\endfirsthead
+\caption[]{Casos de prueba del conjunto PRO: progreso del curso y completitud en cascada (continuación)}\\
+\hline
+\textbf{ID} & \textbf{Entrada o condición} & \textbf{Resultado esperado} & \textbf{Estado} \\ \hline
+\endhead
+\hline \endfoot
+PRO-01 & Completar una lección activa & Estado done, +10 XP y +1 punto de lectura & Aprobó \\ \hline
+PRO-02 & Completar la primera de dos lecciones & La siguiente lección pasa a active y la sección sigue sin completar & Aprobó \\ \hline
+PRO-03 & Completar una lección que ya estaba terminada & 0 XP y ninguna llamada de puntuación & Aprobó \\ \hline
+PRO-04 & Completar una sección (no una lección) & +10 XP y sin puntos de lectura & Aprobó \\ \hline
+PRO-05 & Completar la última lección de una sección & Lección y sección en done, +20 XP & Aprobó \\ \hline
+PRO-06 & Cascada con una sección raíz posterior & La siguiente sección raíz pasa a active & Aprobó \\ \hline
+PRO-07 & Completar la última hermana con otra hermana pendiente & No hay cascada y la sección padre no se completa & Aprobó \\ \hline
+PRO-08 & Lección dentro de una subsección dentro de una sección & Los tres niveles en done y +30 XP & Aprobó \\ \hline
+PRO-09 & Identificador de sección inexistente & Sin error: se registra el progreso y se otorgan 10 XP & Aprobó \\ \hline
+\end{longtable}
+}
+
+\begin{table}[H]
+\centering
+\caption{Cobertura de código de los módulos evaluados}
+\label{tab:pruebas-cobertura}
+\begin{tabular}{lccc}
+\hline
+\textbf{Archivo} & \textbf{Líneas} & \textbf{Ramas} & \textbf{Funciones} \\ \hline
+\texttt{placementQuestions.ts} & 100,0\,\% & 75,0\,\% & 100,0\,\% \\
+\texttt{cursosService.ts} & 28,0\,\% & 14,4\,\% & 14,5\,\% \\
+\texttt{storageService.ts} & 55,8\,\% & 48,5\,\% & 42,9\,\% \\
+\hline
+\end{tabular}
+\end{table}

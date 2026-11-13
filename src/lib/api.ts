@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '@env';
+import { API_KEY } from '@env';
+import { getApiBase, refreshApiUrl } from './config';
 
-const BASE = API_URL;
 const KEY_USER_ID      = 'vlingo_api_user_id';
 const KEY_SESSION_ID   = 'vlingo_session_id';
 const KEY_STORED_EMAIL = 'vlingo_api_email';
@@ -21,32 +21,75 @@ export type HistoryMessage = {
 };
 
 type ApiError = { error: string; detail?: string };
+const ESTADOS_DE_PASARELA = new Set([502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 530]);
+
+function pareceApiCaida(res: Response): boolean {
+  if (ESTADOS_DE_PASARELA.has(res.status)) return true;
+  const tipo = res.headers.get('content-type') ?? '';
+  return !res.ok && !tipo.includes('application/json');
+}
+
+async function pedir(path: string, init?: RequestInit): Promise<Response> {
+  const conCabeceras: RequestInit = {
+    ...init,
+    headers: {
+      ...(init?.headers ?? {}),
+      ...(API_KEY ? { 'x-api-key': API_KEY } : {}),
+    },
+  };
+
+  const baseVieja = getApiBase();
+  let res: Response | null = null;
+
+  try {
+    res = await fetch(`${baseVieja}${path}`, conCabeceras);
+    if (!pareceApiCaida(res)) return res;
+  } catch {
+  }
+  const urlFresca = await refreshApiUrl();
+  if (res && urlFresca === baseVieja) return res;
+  return fetch(`${urlFresca}${path}`, conCabeceras);
+}
+
+async function leerError(res: Response): Promise<never> {
+  if (pareceApiCaida(res)) {
+    throw new Error(
+      'No hay conexión con el servidor de VLINGO. Verifica que la API y el túnel estén encendidos.',
+    );
+  }
+
+  const err: ApiError = await res.json().catch(() => ({ error: 'Sin respuesta' }));
+
+  if (res.status === 401) {
+    throw new Error(
+      API_KEY
+        ? 'La API rechazó la clave. Verifica que API_KEY coincida en VLINGO/.env y vlingo-api/.env.'
+        : 'La app se compiló sin API_KEY. Reinicia el bundler con caché limpio (npx expo start -c) o regenera el APK.',
+    );
+  }
+
+  throw new Error(err.error ?? 'Error de red');
+}
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
-  if (!res.ok) {
-    const err: ApiError = await res.json().catch(() => ({ error: 'Sin respuesta' }));
-    throw new Error(err.error ?? 'Error de red');
-  }
+  const res = await pedir(path);
+  if (!res.ok) await leerError(res);
   return res.json() as Promise<T>;
 }
 
 async function post<T>(path: string, body: Record<string, unknown>): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await pedir(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const err: ApiError = await res.json().catch(() => ({ error: 'Sin respuesta' }));
-    throw new Error(err.error ?? 'Error de red');
-  }
+  if (!res.ok) await leerError(res);
   return res.json() as Promise<T>;
 }
 
 async function userExistsInApi(userId: string): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE}/api/progress/user/${userId}`);
+    const res = await pedir(`/api/progress/user/${userId}`);
     return res.ok;
   } catch {
     return false;
@@ -62,10 +105,6 @@ export async function ensureVlingoUser(
   const storedEmail = await AsyncStorage.getItem(KEY_STORED_EMAIL);
   const storedLevel = await AsyncStorage.getItem(KEY_STORED_LEVEL);
 
-  // Si es el mismo usuario, se guarda el ID en caché y aún válido en el servidor.
-  // El nivel entra en la condición a propósito: si el usuario subió de nivel en
-  // Supabase, la caché deja de ser válida y se fuerza el upsert de abajo para
-  // que la API se entere del nivel nuevo.
   if (storedId && email && storedEmail === email && storedLevel === level) {
     const stillExists = await userExistsInApi(storedId);
     if (stillExists) return storedId;
@@ -127,7 +166,7 @@ export async function deleteSession(
   sessionId: string,
   userId: string,
 ): Promise<void> {
-  const res = await fetch(`${BASE}/api/chat/sessions/${sessionId}`, {
+  const res = await pedir(`/api/chat/sessions/${sessionId}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId }),

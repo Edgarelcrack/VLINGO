@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Modal,
-  KeyboardAvoidingView, Platform,
+  Platform,
 } from 'react-native';
+import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -11,6 +12,7 @@ import {
   eliminarPregunta, MAX_PREGUNTAS_POR_SECCION,
 } from '../services/preguntasService';
 import { pickAndUploadAudio } from '../services/storageService';
+import GrabadorAudio from '../components/GrabadorAudio';
 import { Pregunta, TipoPregunta } from '../types';
 
 const NAVY = '#2B4C72';
@@ -317,8 +319,8 @@ function PreguntaModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableOpacity style={m.backdrop} activeOpacity={1} onPress={onClose} />
+      <KeyboardAvoider style={{ flex: 1 }}>
+        <TouchableOpacity style={[m.backdrop, { minHeight: insets.top + 12 }]} activeOpacity={1} onPress={onClose} />
         <View style={[m.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <View style={m.sheetHandle} />
           <Text style={m.sheetTitle}>{titulo}</Text>
@@ -326,7 +328,7 @@ function PreguntaModal({
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 480 }}
+            style={{ maxHeight: 480, flexShrink: 1 }}
           >
             <Text style={m.label}>Tipo de pregunta</Text>
             <View style={m.tipoRow}>
@@ -421,6 +423,12 @@ function PreguntaModal({
                     </>
                   )}
                 </TouchableOpacity>
+                {!audioUrl && (
+                  <>
+                    <Text style={m.audioSep}>o</Text>
+                    <GrabadorAudio onSubido={setAudioUrl} disabled={uploadingAudio} />
+                  </>
+                )}
                 <Text style={m.label}>Respuesta esperada del estudiante</Text>
                 <TextInput
                   style={[m.input, m.inputMulti]}
@@ -483,7 +491,7 @@ function PreguntaModal({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
     </Modal>
   );
 }
@@ -566,6 +574,8 @@ const m = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
     backgroundColor: '#fff',
+    // Con el teclado abierto la hoja se encoge en vez de salirse por arriba
+    flexShrink: 1,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
   },
@@ -636,4 +646,8 @@ const m = StyleSheet.create({
     backgroundColor: 'rgba(46,125,82,0.07)', borderColor: '#2E7D52', borderStyle: 'solid',
   },
   audioBtnTxt: { fontSize: 13, color: NAVY, fontWeight: '600' },
+  audioSep: {
+    fontSize: 11, color: '#98A4B3', textAlign: 'center',
+    marginTop: -4, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1,
+  },
 });

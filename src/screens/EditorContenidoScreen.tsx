@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Modal,
-  KeyboardAvoidingView, Platform,
+  Platform,
 } from 'react-native';
+import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getSeccion, actualizarSeccion } from '../services/cursosService';
@@ -332,8 +333,8 @@ function BloqueModal({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableOpacity style={m.backdrop} activeOpacity={1} onPress={onClose} />
+      <KeyboardAvoider style={{ flex: 1 }}>
+        <TouchableOpacity style={[m.backdrop, { minHeight: insets.top + 12 }]} activeOpacity={1} onPress={onClose} />
         <View style={[m.sheet, { paddingBottom: insets.bottom + 16 }]}>
           <View style={m.handle} />
           <Text style={m.title}>
@@ -343,7 +344,7 @@ function BloqueModal({
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 420 }}
+            style={{ maxHeight: 420, flexShrink: 1 }}
           >
             {tipo === 'texto' && (
               <TextInput
@@ -427,7 +428,7 @@ function BloqueModal({
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
     </Modal>
   );
 }
@@ -512,6 +513,8 @@ const m = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
     backgroundColor: '#fff',
+    // Con el teclado abierto la hoja se encoge en vez de salirse por arriba
+    flexShrink: 1,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
   },

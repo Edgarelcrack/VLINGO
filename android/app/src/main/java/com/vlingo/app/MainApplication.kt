@@ -1,4 +1,4 @@
-package com.anonymous.vlingoapp
+package com.vlingo.app
 
 import android.app.Application
 import android.content.res.Configuration

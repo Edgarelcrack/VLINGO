@@ -1,5 +1,8 @@
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@env';
 
 const KEY_ACTIVE_DATES = 'vlingo_active_dates';
 
@@ -47,27 +50,18 @@ export async function getStreak(): Promise<number> {
   }
   return streak;
 }
-import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@env';
+
+// Audio de ejercicios
 
 const AUDIO_BUCKET = 'audio-ejercicios';
 const UPLOAD_TIMEOUT_MS = 30_000;
 
-export async function pickAndUploadAudio(): Promise<{ url: string | null; error: string | null }> {
-  const result = await DocumentPicker.getDocumentAsync({
-    type: ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/*'],
-    copyToCacheDirectory: true,
-  });
 
-  if (result.canceled || !result.assets?.length) {
-    return { url: null, error: null };
-  }
-
-  const asset = result.assets[0];
-  const uri   = asset.uri;
-  const name  = asset.name ?? `audio_${Date.now()}.mp3`;
-  const path  = `${Date.now()}_${name.replace(/\s+/g, '_')}`;
+export async function subirAudioDesdeUri(
+  uri: string,
+  nombre: string,
+): Promise<{ url: string | null; error: string | null }> {
+  const path = `${Date.now()}_${nombre.replace(/\s+/g, '_')}`;
 
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token ?? SUPABASE_ANON_KEY;
@@ -107,4 +101,18 @@ export async function pickAndUploadAudio(): Promise<{ url: string | null; error:
 
   const { data } = supabase.storage.from(AUDIO_BUCKET).getPublicUrl(path);
   return { url: data.publicUrl, error: null };
+}
+
+export async function pickAndUploadAudio(): Promise<{ url: string | null; error: string | null }> {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a', 'audio/*'],
+    copyToCacheDirectory: true,
+  });
+
+  if (result.canceled || !result.assets?.length) {
+    return { url: null, error: null };
+  }
+
+  const asset = result.assets[0];
+  return subirAudioDesdeUri(asset.uri, asset.name ?? `audio_${Date.now()}.mp3`);
 }

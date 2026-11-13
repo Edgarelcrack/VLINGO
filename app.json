@@ -2,7 +2,7 @@
   "expo": {
     "name": "VLINGO",
     "slug": "vlingo-app",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "splash": {
@@ -33,7 +33,14 @@
           "speechRecognitionPermission": "Allow VLINGO to use speech recognition for pronunciation exercises."
         }
       ],
-      "expo-document-picker"
-    ]
+      "expo-document-picker",
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "44dd72bc-9e7b-4811-872f-ca31cb6b0bfa"
+      }
+    },
+    "owner": "edgarandresvargasg"
   }
 }

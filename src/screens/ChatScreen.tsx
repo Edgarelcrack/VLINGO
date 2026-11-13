@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TextInput,
-  TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform,
+  TouchableOpacity, StyleSheet, Platform,
   ActivityIndicator, Alert, Modal, FlatList,
   Animated, Easing,
 } from 'react-native';
+import KeyboardAvoider from '../components/KeyboardAvoider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
@@ -53,10 +54,6 @@ function diffWords(original: string, corrected: string): { word: string; wrong: 
   });
 }
 
-/* ── Helpers de animación ────────────────────────────────────────── */
-
-// Anima la entrada del hijo con fade-in + slide-up. Se ejecuta solo al
-// montarse, por lo que mensajes ya renderizados no re-animan en re-renders.
 function FadeInUp({
   children,
   delay = 0,
@@ -97,7 +94,6 @@ function FadeInUp({
   );
 }
 
-// Tres puntos saltando para reemplazar el "Escribiendo..." con ActivityIndicator.
 function TypingDots({ color = '#2B4C72' }: { color?: string }) {
   const dot1 = useRef(new Animated.Value(0)).current;
   const dot2 = useRef(new Animated.Value(0)).current;
@@ -149,7 +145,6 @@ function TypingDots({ color = '#2B4C72' }: { color?: string }) {
   );
 }
 
-// TouchableOpacity con feedback de escala al presionar.
 function PressScale({
   children,
   onPress,
@@ -270,8 +265,6 @@ export default function ChatScreen() {
         user.email?.split('@')[0] ??
         'Usuario';
 
-      // Obteniene/crear usuario válido en API. El nivel viene de Supabase (test
-      // de nivelación) y es el que la IA usa para calibrar sus respuestas.
       const userId = await ensureVlingoUser(
         name,
         user.email ?? undefined,
@@ -348,9 +341,12 @@ export default function ChatScreen() {
     try {
       const text = await getCursoContentText(curso.id);
       attachedContextRef.current = text || null;
-      console.log('[Chat][curso] adjuntado:', curso.titulo,
-        '| chars:', text?.length ?? 0);
-      console.log('[Chat][curso] preview:', (text ?? '').slice(0, 400));
+      if (__DEV__) {
+        // Fuera de desarrollo esto volcaría contenido del curso al logcat
+        console.log('[Chat][curso] adjuntado:', curso.titulo,
+          '| chars:', text?.length ?? 0);
+        console.log('[Chat][curso] preview:', (text ?? '').slice(0, 400));
+      }
       if (!text) {
         Alert.alert(
           'Curso vacío',
@@ -518,11 +514,7 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
+      <KeyboardAvoider style={{ flex: 1 }}>
         <ScrollView
           ref={scrollRef}
           style={{ flex: 1 }}
@@ -674,7 +666,7 @@ export default function ChatScreen() {
             <Ionicons name="send" size={16} color="#fff" />
           </PressScale>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoider>
 
       {/* ── Menú adjuntar (citar curso / pedir evaluación) ── */}
       <Modal

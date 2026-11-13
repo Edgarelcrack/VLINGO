@@ -20,7 +20,7 @@ El profesor puede crear cursos, secciones, contenido y preguntas desde la misma 
 ## Requisitos previos
 
 - **Node.js 20.16 o superior** y npm.
-- La app **Expo Go** instalada en tu celular (Android o iOS), con el celular y el computador en la **misma red Wi-Fi**.
+- La app **Expo Go** instalada en tu celular (Android o iOS) con la version 54, con el celular y el computador en la **misma red Wi-Fi**.
 - (Opcional) **Android Studio** y **JDK**, solo si se quiere compilar el proyecto nativo o generar un APK.
 - Un proyecto de **Supabase** con las tablas y funciones del modelo (`usuario`, `curso`, `seccion`, `pregunta`, `progreso_usuario`, `app_config`, el bucket `audio-ejercicios` y las funciones RPC).
 
